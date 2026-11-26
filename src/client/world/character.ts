@@ -663,6 +663,7 @@ export function createCharacter(options: {
   // -------------------------------------------------- floating status for others
   let healthFill: THREE.Mesh | null = null;
   let status: THREE.Group | null = null;
+  let nameSprite: THREE.Sprite | null = null;
   if (!isSelf) {
     status = new THREE.Group();
     status.position.y = 7.2;
@@ -688,16 +689,16 @@ export function createCharacter(options: {
     healthFill.renderOrder = 21;
     status.add(healthFill);
 
-    const nameSprite = new THREE.Sprite(
+    nameSprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
-        map: makeNameTexture(label),
+        map: makeNameTexture(label, color),
         transparent: true,
         depthTest: false,
         depthWrite: false,
       })
     );
-    nameSprite.scale.set(3.6, 0.9, 1);
-    nameSprite.position.y = 0.8;
+    nameSprite.scale.set(6, 1.5, 1);
+    nameSprite.position.y = 1.42;
     nameSprite.renderOrder = 22;
     status.add(nameSprite);
   }
@@ -803,6 +804,14 @@ export function createCharacter(options: {
 
       if (status && healthFill) {
         status.quaternion.copy(camera.quaternion);
+        if (nameSprite) {
+          // Keep ally names legible from across the arena without letting
+          // them cover the screen at melee range.
+          const distance = camera.position.distanceTo(root.position);
+          const height = THREE.MathUtils.clamp(distance * 0.09, 1.35, 6);
+          nameSprite.scale.set(height * 4, height, 1);
+          nameSprite.position.y = 0.7 + height / 2;
+        }
         const ratio = Math.max(0, Math.min(1, health / 100));
         healthFill.scale.x = Math.max(0.001, ratio);
         healthFill.position.x = -(1 - ratio) * 1.25;

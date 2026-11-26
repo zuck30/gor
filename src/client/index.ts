@@ -419,6 +419,7 @@ const client = new ColyseusSDK<typeof server>(serverEndpoint());
 interface PlayerRig {
   rig: CharacterRig;
   label: string;
+  color: string;
 }
 
 interface EnemyEntry {
@@ -532,6 +533,37 @@ async function main(profile: PlayerProfile) {
 
   const callbacks = Callbacks.get(room);
 
+  /**
+   * A stable colour for a warrior whose chosen colour has not arrived yet.
+   * Allies must never borrow the local player's colour, or every fighter
+   * looks like a clone of the hero.
+   */
+  function fallbackColorFor(sessionId: string): string {
+    let hash = 0;
+    for (let i = 0; i < sessionId.length; i += 1) {
+      hash = (hash * 31 + sessionId.charCodeAt(i)) >>> 0;
+    }
+    return PLAYER_COLORS[hash % PLAYER_COLORS.length].value;
+  }
+
+  function characterIdentity(
+    sessionId: string,
+    fallbackName?: string,
+    fallbackColor?: string
+  ): { label: string; color: string } {
+    const isSelf = sessionId === room.sessionId;
+    const player = room.state.players.get(sessionId);
+    const label = sanitizeName(player?.name)
+      || sanitizeName(fallbackName)
+      || (isSelf ? sanitizeName(profile.name) : "")
+      || `ALLY ${sessionId.slice(0, 4).toUpperCase()}`;
+    const color = sanitizeColor(player?.color)
+      ?? sanitizeColor(fallbackColor)
+      ?? (isSelf ? sanitizeColor(profile.color) : null)
+      ?? fallbackColorFor(sessionId);
+    return { label, color };
+  }
+
   function ensureCharacter(
     sessionId: string,
     fallbackName?: string,
@@ -542,24 +574,45 @@ async function main(profile: PlayerProfile) {
       return existing;
     }
     const isSelf = sessionId === room.sessionId;
-    const player = room.state.players.get(sessionId);
-    const label = sanitizeName(player?.name)
-      || sanitizeName(fallbackName)
-      || (isSelf ? sanitizeName(profile.name) : `ALLY ${sessionId.slice(0, 4).toUpperCase()}`)
-      || "Wanderer";
-    const color = sanitizeColor(player?.color)
-      ?? sanitizeColor(fallbackColor)
-      ?? sanitizeColor(profile.color)
-      ?? PLAYER_COLORS[0].value;
+    const { label, color } = characterIdentity(sessionId, fallbackName, fallbackColor);
     const rig = createCharacter({ isSelf, sessionId, label, color });
     scene.add(rig.group);
-    const entry = { rig, label };
+    const entry = { rig, label, color };
     characters.set(sessionId, entry);
     if (isSelf) {
       selfRig = entry;
       heroNameEl.textContent = label;
     }
     return entry;
+  }
+
+  /**
+   * Names and colours arrive from the server a frame or two after a player is
+   * added. Rebuild the rig once the real identity lands so allies show their
+   * own name and colour instead of a placeholder.
+   */
+  function syncCharacterIdentity(
+    sessionId: string,
+    fallbackName?: string,
+    fallbackColor?: string
+  ): PlayerRig {
+    const entry = characters.get(sessionId);
+    if (!entry) {
+      return ensureCharacter(sessionId, fallbackName, fallbackColor);
+    }
+    const next = characterIdentity(sessionId, fallbackName, fallbackColor);
+    if (next.label === entry.label && next.color === entry.color) {
+      return entry;
+    }
+    const previous = entry.rig.group.position.clone();
+    scene.remove(entry.rig.group);
+    characters.delete(sessionId);
+    if (entry === selfRig) {
+      selfRig = null;
+    }
+    const fresh = ensureCharacter(sessionId, fallbackName, fallbackColor);
+    fresh.rig.group.position.copy(previous);
+    return fresh;
   }
 
   function ensureEnemy(id: string, enemy: { kind: number; health: number }): EnemyEntry {
@@ -1027,10 +1080,7 @@ async function main(profile: PlayerProfile) {
     }
 
     for (const [sessionId, player] of room.state.players) {
-      const entry = characters.get(sessionId);
-      if (!entry) {
-        continue;
-      }
+      const entry = syncCharacterIdentity(sessionId, player.name, player.color);
       const mesh = entry.rig.group;
       mesh.position.x = toWorldX(predict.value(player, "x"));
       mesh.position.z = toWorldZ(predict.value(player, "y"));

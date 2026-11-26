@@ -275,23 +275,32 @@ export function makeBannerTexture(anisotropy: number): THREE.CanvasTexture {
   return texture;
 }
 
-export function makeNameTexture(name: string): THREE.CanvasTexture {
-  const w = 512;
-  const h = 128;
+export function makeNameTexture(name: string, color = "#d6b84a"): THREE.CanvasTexture {
+  const w = 1024;
+  const h = 256;
   const el = document.createElement("canvas");
   el.width = w;
   el.height = h;
   const ctx = el.getContext("2d")!;
 
   ctx.clearRect(0, 0, w, h);
-  ctx.font = "700 54px ui-sans-serif, system-ui, sans-serif";
+  // Wide enough for a 16 character name at this size.
+  ctx.font = "700 92px ui-sans-serif, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = "rgba(8,14,11,0.85)";
-  ctx.strokeText(name, w / 2, h / 2);
-  ctx.fillStyle = "#f4eeda";
-  ctx.fillText(name, w / 2, h / 2);
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 16;
+  ctx.strokeStyle = "rgba(6,10,8,0.92)";
+  ctx.strokeText(name, w / 2, h / 2 - 16);
+  ctx.fillStyle = "#f7efdc";
+  ctx.fillText(name, w / 2, h / 2 - 16);
+
+  // A short bar in the warrior's chosen colour under the name.
+  const width = Math.min(w - 80, Math.max(90, ctx.measureText(name).width * 0.62));
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 16;
+  ctx.fillRect(w / 2 - width / 2, h / 2 + 50, width, 11);
 
   const texture = new THREE.CanvasTexture(el);
   texture.colorSpace = THREE.SRGBColorSpace;
