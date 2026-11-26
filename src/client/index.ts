@@ -442,6 +442,7 @@ async function main() {
   const self = room.state.players.get(room.sessionId);
 
   let briefOpen = false;
+  let initialBrief = false;
 
   function setBrief(open: boolean) {
     briefOpen = open;
@@ -456,6 +457,7 @@ async function main() {
 
   function beginOrClose() {
     if (!room.state.started) {
+      initialBrief = false;
       room.send("ready");
     }
     setBrief(false);
@@ -467,6 +469,10 @@ async function main() {
   function togglePause() {
     if (!room.state.started) { return; }
     if (document.body.classList.contains("is-cinematic")) { return; }
+    if (room.state.players.size > 1 && !room.state.paused) {
+      announce("Pause is solo only", 1600);
+      return;
+    }
     room.send("togglePause");
   }
 
@@ -681,6 +687,14 @@ async function main() {
       deathTriumphsEl.textContent = String(board.count());
     }
 
+    if (initialBrief && room.state.started) {
+      initialBrief = false;
+      setBrief(false);
+    }
+
+    const solo = room.state.players.size <= 1;
+    pauseToggle.classList.toggle("is-solo-only", !solo && !paused);
+    pauseToggle.title = !solo && !paused ? "Pause is solo only" : paused ? "Resume" : "Pause";
     if (briefOpen) {
       briefAction.textContent = room.state.started
         ? "Return to the hunt"
@@ -834,7 +848,8 @@ async function main() {
   loadingEl?.classList.add("is-hidden");
   window.setTimeout(() => loadingEl?.remove(), 900);
   window.setTimeout(() => voices.play("intro"), 1000);
-  setBrief(!room.state.started);
+  initialBrief = !room.state.started;
+  setBrief(initialBrief);
 
   let lastPhase = room.state.stormPhase;
   let lastMode = room.state.stormMode;
@@ -879,6 +894,14 @@ async function main() {
 
   function startRageCinematic(px: number, pz: number) {
     if (cinematicActive) { return; }
+    if (room.state.players.size > 1) {
+      // Do not freeze allies for a personal glory shot in a shared arena.
+      fx.thunder(px, pz, 2.2);
+      fx.kick(0.6);
+      flashScreen(0.8);
+      voices.playSfx("thunder", 0.8, 2000);
+      return;
+    }
     cinematicActive = true;
     cinematicTime = CINEMATIC_SECONDS;
     intro = 0;

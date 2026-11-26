@@ -121,11 +121,16 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
     this.onMessage("togglePause", () => {
       if (!this.started) { return; }
+      // Solo players may pause. In a shared arena only an already-paused room
+      // may be resumed, so one player can never freeze everyone else.
+      if (this.state.players.size > 1 && !this.state.paused) { return; }
       this.state.paused = !this.state.paused;
     });
 
     this.onMessage("rageCinematic", () => {
       if (!this.started || this.state.paused) { return; }
+      // The slow-motion finale freezes the arena, so it is solo only.
+      if (this.state.players.size > 1) { return; }
       this.cinematicRemaining = 4.8;
     });
 
@@ -175,6 +180,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       raging: false,
       respawnTimer: 0,
     }));
+
+    // A solo player may have paused. A new arrival resumes the hunt.
+    if (this.state.paused) {
+      this.state.paused = false;
+    }
 
     this.attackCooldown.set(client.sessionId, 0);
     this.invulnerable.set(client.sessionId, 2);
