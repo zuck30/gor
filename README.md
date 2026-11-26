@@ -79,17 +79,28 @@ wss://your-colyseus-server.example.com
 
 Then redeploy. Without that variable the page loads but cannot join the arena.
 
-### Room server
+### Room server on Render
 
-Deploy the server separately on a host that supports long-lived WebSockets
-(Fly.io, Render, Railway, a VPS, or Colyseus Cloud):
+The repo includes `render.yaml` and `server-production.mjs`. The wrapper reads
+the runtime `PORT` that Render assigns, so do not start
+`dist/server/server.mjs` directly on a managed host.
+
+1. In Render, choose **New → Blueprint**.
+2. Connect the `zuck30/gor` repository.
+3. Apply the Blueprint. It creates the `gor-arena` web service and checks
+   `/hi`.
+4. Copy the service URL, for example `https://gor-arena.onrender.com`.
+5. In Vercel, add `VITE_SERVER_URL` with that URL and redeploy.
+
+Render free instances sleep when idle, so the first connection can take about
+30 seconds. Retry once if the arena does not answer immediately.
+
+For Fly.io, Railway or a VPS, run:
 
 ```bash
 npm run build
-node dist/server/server.mjs
+PORT=2567 node server-production.mjs
 ```
-
-Point `VITE_SERVER_URL` at that host.
 
 ## Scripts
 

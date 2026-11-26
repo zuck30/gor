@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: gor-arena
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node server-production.mjs
+    healthCheckPath: /hi
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.16.0
