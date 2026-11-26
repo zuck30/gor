@@ -4,17 +4,34 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0b0f0d" />
-    <meta name="description" content="Tufani — a lite, browser-based battle royale. The storm decides." />
+    <meta name="description" content="The God of Rage. A mythic browser action game. Hunt the creatures and gods of a storm-wracked island." />
     <link rel="icon" href="data:," />
-    <title>Tufani — the storm decides</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@700;900&family=EB+Garamond:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <title>The God of Rage</title>
     <style>
+      @font-face {
+        font-family: "GodOfWar";
+        src: url("/GODOFWAR.TTF") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+
       :root {
         --bg: #0b0f0d;
-        --panel: rgba(14, 22, 18, 0.82);
+        --panel: rgba(14, 22, 18, 0.78);
         --line: rgba(214, 184, 74, 0.28);
         --text: #e7e4d8;
         --muted: #9aa79d;
         --gold: #d6b84a;
+        --danger: #ff8f6b;
+        --blood: #a8342a;
+        --rage: #e05a2a;
       }
 
       * { box-sizing: border-box; }
@@ -25,7 +42,7 @@
         overflow: hidden;
         background: var(--bg);
         color: var(--text);
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-family: "Cinzel", "EB Garamond", Georgia, "Times New Roman", serif;
       }
 
       #app { position: fixed; inset: 0; }
@@ -41,25 +58,37 @@
         justify-content: space-between;
         padding: 20px 24px;
         pointer-events: none;
+        z-index: 10;
       }
 
       .brand { line-height: 1; }
-
       .brand h1 {
         margin: 0;
-        font-size: clamp(24px, 3vw, 36px);
-        font-weight: 800;
-        letter-spacing: 0.16em;
+        font-family: "GodOfWar", "Cinzel Decorative", "Cinzel", Georgia, serif;
+        font-size: clamp(19px, 2.5vw, 33px);
+        font-weight: 400;
+        letter-spacing: 0.07em;
         text-transform: uppercase;
+        white-space: nowrap;
         color: var(--text);
+        text-shadow: 0 2px 22px rgba(0, 0, 0, 0.6), 0 0 34px rgba(214, 184, 74, 0.18);
       }
-
       .brand p {
         margin: 8px 0 0;
+        font-family: "Cinzel", Georgia, serif;
         font-size: 12px;
-        letter-spacing: 0.18em;
+        font-weight: 700;
+        letter-spacing: 0.28em;
         text-transform: uppercase;
-        color: var(--gold);
+        color: var(--blood);
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.75), 0 0 22px rgba(168, 52, 42, 0.35);
+      }
+
+      .hud-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 14px;
       }
 
       .badge {
@@ -76,7 +105,6 @@
         border-radius: 999px;
         backdrop-filter: blur(8px);
       }
-
       .badge::before {
         content: "";
         width: 7px;
@@ -84,6 +112,45 @@
         border-radius: 50%;
         background: var(--gold);
         box-shadow: 0 0 10px var(--gold);
+      }
+      .badge span {
+        font-size: 10px;
+        letter-spacing: 0.24em;
+        color: var(--muted);
+      }
+      .badge b {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--gold);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .minimap {
+        position: relative;
+        padding: 9px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      }
+      .minimap canvas {
+        display: block;
+        width: 170px;
+        height: 170px;
+        border-radius: 11px;
+        background: #0c3550;
+      }
+      .minimap-label {
+        position: absolute;
+        left: 16px;
+        bottom: 15px;
+        font-size: 9px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(240, 233, 208, 0.75);
+        pointer-events: none;
+        text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
       }
 
       .footer-hud {
@@ -98,6 +165,7 @@
         padding: 20px 24px;
         pointer-events: none;
         font-size: 12px;
+        z-index: 10;
       }
 
       .controls {
@@ -109,11 +177,11 @@
         line-height: 1.7;
         color: var(--muted);
       }
-
       .controls strong { color: var(--text); font-weight: 600; }
 
       kbd {
         display: inline-block;
+        font-family: "Cinzel", Georgia, serif;
         min-width: 20px;
         padding: 1px 5px;
         font: inherit;
@@ -137,14 +205,12 @@
         border-radius: 999px;
         backdrop-filter: blur(8px);
       }
-
       #storm-status {
         color: var(--gold);
         transition: color 0.3s, border-color 0.3s;
       }
-
       #storm-status.is-closing {
-        color: #ff8f6b;
+        color: var(--danger);
         border-color: rgba(255, 143, 107, 0.5);
       }
 
@@ -154,7 +220,6 @@
         align-items: flex-start;
         gap: 8px;
       }
-
       .health {
         display: flex;
         align-items: center;
@@ -169,7 +234,6 @@
         border-radius: 10px;
         backdrop-filter: blur(8px);
       }
-
       .health-track {
         width: clamp(120px, 18vw, 180px);
         height: 6px;
@@ -177,17 +241,14 @@
         background: rgba(255, 255, 255, 0.08);
         border-radius: 999px;
       }
-
       #health-fill {
         display: block;
         width: 100%;
         height: 100%;
-        background: var(--gold);
+        background: linear-gradient(90deg, #8ecf65, var(--gold));
         transition: width 0.15s linear, background 0.3s;
       }
-
       #health-fill.low { background: #e05a5a; }
-
       #health-value {
         color: var(--text);
         font-variant-numeric: tabular-nums;
@@ -199,8 +260,576 @@
         gap: 8px;
       }
 
-      @media (max-width: 640px) {
+      .rage {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 13px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--panel);
+        border: 1px solid rgba(224, 90, 42, 0.35);
+        border-radius: 10px;
+        backdrop-filter: blur(8px);
+      }
+      .rage-track {
+        width: clamp(120px, 18vw, 180px);
+        height: 6px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+      }
+      #rage-fill {
+        display: block;
+        width: 0%;
+        height: 100%;
+        background: linear-gradient(90deg, #7a2218, var(--rage));
+        transition: width 0.15s linear;
+      }
+      #rage-value { color: var(--text); font-variant-numeric: tabular-nums; }
+      #rage-fill.is-full { box-shadow: 0 0 14px var(--rage); }
+      .rage.is-full { border-color: rgba(255, 120, 60, 0.8); }
+
+      .weapon {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 13px;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--gold);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        backdrop-filter: blur(8px);
+      }
+      .weapon kbd { margin-left: auto; }
+
+      #wave-banner {
+        position: fixed;
+        top: 18%;
+        left: 50%;
+        z-index: 12;
+        transform: translate(-50%, -12px);
+        font-family: "GodOfWar", "Cinzel Decorative", "Cinzel", Georgia, serif;
+        font-size: clamp(22px, 4vw, 46px);
+        font-weight: 400;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #f1ddb2;
+        text-shadow: 0 2px 26px rgba(0, 0, 0, 0.85), 0 0 40px rgba(224, 90, 42, 0.28);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.5s ease, transform 0.5s ease;
+      }
+      #wave-banner.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      #boss-bar {
+        position: fixed;
+        top: 22px;
+        left: 50%;
+        z-index: 12;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        transform: translateX(-50%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.35s ease;
+      }
+      #boss-bar.is-visible { opacity: 1; }
+      #boss-name {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: #ffb08a;
+        text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+      }
+      .boss-track {
+        width: min(460px, 56vw);
+        height: 9px;
+        overflow: hidden;
+        background: rgba(10, 6, 5, 0.8);
+        border: 1px solid rgba(255, 110, 70, 0.5);
+        border-radius: 999px;
+        box-shadow: 0 0 26px rgba(255, 60, 30, 0.25);
+      }
+      #boss-fill {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, #7d1c12, #ff5d2e);
+        transition: width 0.2s linear;
+      }
+
+      #death-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        background: radial-gradient(circle at 50% 45%, rgba(54, 7, 7, 0.45), rgba(4, 3, 3, 0.92) 70%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.6s ease;
+      }
+      #death-screen.is-visible { opacity: 1; }
+      .death-title {
+        margin: 0;
+        font-family: "GodOfWar", "Cinzel Decorative", "Cinzel", Georgia, serif;
+        font-size: clamp(44px, 9vw, 110px);
+        font-weight: 400;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #c4372b;
+        text-shadow: 0 4px 40px rgba(0, 0, 0, 0.9), 0 0 70px rgba(196, 55, 43, 0.35);
+      }
+      .death-sub {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: #d8c6a8;
+      }
+      .death-kills {
+        margin: 4px 0 0;
+        font-family: "EB Garamond", Georgia, serif;
+        font-style: italic;
+        font-size: 18px;
+        color: #a99780;
+      }
+
+      #warning {
+        position: fixed;
+        top: 96px;
+        left: 50%;
+        z-index: 12;
+        padding: 11px 20px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #ffd2c2;
+        background: rgba(52, 9, 11, 0.68);
+        border: 1px solid rgba(255, 120, 90, 0.65);
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        box-shadow: 0 0 30px rgba(255, 80, 60, 0.35);
+        pointer-events: none;
+        opacity: 0;
+        transform: translate(-50%, -14px);
+        transition: opacity 0.35s ease, transform 0.35s ease;
+      }
+      #warning.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        animation: storm-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes storm-pulse {
+        0%, 100% { box-shadow: 0 0 24px rgba(255, 80, 60, 0.28); }
+        50% { box-shadow: 0 0 48px rgba(255, 88, 60, 0.65); }
+      }
+
+      #loading {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 50% 38%, rgba(38, 72, 54, 0.9), rgba(7, 11, 9, 0.98) 68%);
+        transition: opacity 0.7s ease;
+      }
+      #loading.is-hidden { opacity: 0; pointer-events: none; }
+      .loading-inner { text-align: center; padding: 24px; }
+      .loading-mark {
+        margin: 0;
+        font-family: "GodOfWar", "Cinzel Decorative", "Cinzel", Georgia, serif;
+        font-size: clamp(42px, 8vw, 96px);
+        font-weight: 400;
+        font-weight: 400;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #f3ecd8;
+        text-shadow: 0 0 70px rgba(214, 184, 74, 0.32), 0 4px 24px rgba(0, 0, 0, 0.6);
+      }
+      .loading-sub {
+        margin: 12px 0 30px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--blood);
+        text-shadow: 0 0 30px rgba(168, 52, 42, 0.4);
+      }
+      .loading-bar {
+        width: 210px;
+        height: 3px;
+        margin: 0 auto;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+      }
+      .loading-bar i {
+        display: block;
+        width: 40%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        animation: loading-sweep 1.4s ease-in-out infinite;
+      }
+      @keyframes loading-sweep {
+        0% { transform: translateX(-110%); }
+        100% { transform: translateX(360%); }
+      }
+      #loading.has-error .loading-bar { display: none; }
+      #loading.has-error p {
+        margin: 8px 0 0;
+        font-size: 13px;
+        color: #ffb4a0;
+        letter-spacing: 0.04em;
+      }
+
+      #help-toggle {
+        padding: 9px 13px;
+        font: inherit;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--gold);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        cursor: pointer;
+        pointer-events: auto;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      #help-toggle:hover,
+      #help-toggle:focus-visible {
+        color: var(--text);
+        border-color: rgba(214, 184, 74, 0.65);
+        outline: none;
+      }
+      #sound-toggle {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        color: var(--gold);
+        background: var(--panel);
+        border: 1px solid rgba(214, 184, 74, 0.5);
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        cursor: pointer;
+        pointer-events: auto;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      #sound-toggle:hover,
+      #sound-toggle:focus-visible {
+        color: var(--text);
+        border-color: rgba(214, 184, 74, 0.8);
+        outline: none;
+      }
+      #sound-toggle svg { width: 18px; height: 18px; display: block; }
+      #sound-toggle .icon-off { display: none; }
+      #sound-toggle.is-muted { color: #7f7668; border-color: rgba(214, 184, 74, 0.22); }
+      #sound-toggle.is-muted .icon-on { display: none; }
+      #sound-toggle.is-muted .icon-off { display: block; }
+
+      #voice-line {
+        position: fixed;
+        left: 50%;
+        bottom: 128px;
+        z-index: 11;
+        max-width: min(700px, 80vw);
+        padding: 10px 22px;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: clamp(16px, 2vw, 22px);
+        font-style: italic;
+        letter-spacing: 0.04em;
+        text-align: center;
+        color: #f2e7c9;
+        background: rgba(10, 14, 12, 0.6);
+        border-top: 1px solid rgba(214, 184, 74, 0.35);
+        border-bottom: 1px solid rgba(214, 184, 74, 0.35);
+        backdrop-filter: blur(6px);
+        pointer-events: none;
+        opacity: 0;
+        transform: translate(-50%, 8px);
+        transition: opacity 0.4s ease, transform 0.4s ease;
+      }
+      #voice-line.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      /* ---- hunt brief -------------------------------------------------- */
+      #brief {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        padding: clamp(10px, 3vw, 36px);
+        background:
+          radial-gradient(circle at 50% 35%, rgba(52, 18, 16, 0.42), rgba(3, 5, 4, 0.9) 72%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.4s ease;
+      }
+      #brief.is-visible { opacity: 1; pointer-events: auto; }
+      .brief-panel {
+        width: min(1010px, 94vw);
+        max-height: 92vh;
+        overflow: auto;
+        padding: clamp(18px, 3vw, 34px);
+        background:
+          linear-gradient(148deg, rgba(32, 24, 22, 0.97), rgba(12, 12, 11, 0.98) 55%, rgba(24, 17, 15, 0.98));
+        border: 1px solid rgba(214, 184, 74, 0.55);
+        outline: 1px solid rgba(214, 184, 74, 0.15);
+        outline-offset: 4px;
+        box-shadow: 0 30px 100px rgba(0, 0, 0, 0.75);
+        scrollbar-width: thin;
+      }
+      .brief-kicker {
+        margin: 0 0 6px;
+        font-size: 10px;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .brief-head h2 {
+        margin: 0;
+        font-family: "GodOfWar", "Cinzel Decorative", "Cinzel", Georgia, serif;
+        font-size: clamp(22px, 3.5vw, 42px);
+        font-weight: 400;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #f2e7ce;
+      }
+      .brief-lead {
+        margin: 10px 0 0;
+        max-width: 74ch;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: clamp(15px, 1.6vw, 19px);
+        line-height: 1.5;
+        color: #c7b89d;
+      }
+      .brief-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px 26px;
+        margin-top: 24px;
+      }
+      .brief-card {
+        padding-top: 12px;
+        border-top: 1px solid rgba(214, 184, 74, 0.28);
+      }
+      .brief-card h3,
+      .brief-triumphs h3 {
+        margin: 0 0 8px;
+        font-size: 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .brief-card p,
+      .brief-card li {
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 15px;
+        line-height: 1.5;
+        color: #cfc3ad;
+      }
+      .brief-card p { margin: 0 0 8px; }
+      .brief-card ol,
+      .brief-card ul { margin: 0; padding-left: 18px; }
+      .brief-card li { margin: 0 0 5px; }
+      .brief-card b { color: #f1e5cb; }
+      .brief-card kbd { font-size: 10px; }
+      .foe-list { list-style: none; padding-left: 0 !important; }
+      .foe-list li {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 4px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      }
+      .foe-list b {
+        min-width: 82px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 11px;
+        color: #e0bc79;
+      }
+      .foe-list span { color: #a99c86; font-size: 14px; }
+      .brief-triumphs {
+        margin-top: 22px;
+        padding-top: 14px;
+        border-top: 1px solid rgba(214, 184, 74, 0.28);
+      }
+      .brief-triumphs-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .brief-triumphs-head span {
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: var(--gold);
+        font-variant-numeric: tabular-nums;
+      }
+      #triumph-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px 16px;
+        margin: 8px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      #triumph-list li {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 13px;
+        line-height: 1.35;
+        color: #7f7565;
+        opacity: 0.72;
+      }
+      #triumph-list li::before {
+        content: "";
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        margin-top: 4px;
+        transform: rotate(45deg);
+        border: 1px solid rgba(214, 184, 74, 0.35);
+      }
+      #triumph-list li b {
+        display: block;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #9a8a70;
+        font-weight: 600;
+      }
+      #triumph-list li.is-earned { color: #cfc3ad; opacity: 1; }
+      #triumph-list li.is-earned::before {
+        background: var(--gold);
+        box-shadow: 0 0 8px rgba(214, 184, 74, 0.6);
+        border-color: var(--gold);
+      }
+      #triumph-list li.is-earned b { color: #e4c887; }
+      .brief-actions {
+        position: sticky;
+        bottom: -34px;
+        z-index: 2;
+        margin: 10px -4px -22px;
+        padding: 18px 4px 24px;
+        text-align: center;
+        background: linear-gradient(180deg, rgba(12, 12, 11, 0) 0%, rgba(12, 12, 11, 0.96) 38%);
+      }
+      .brief-button {
+        padding: 13px 34px;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #ffe9bc;
+        background: linear-gradient(180deg, rgba(118, 26, 20, 0.9), rgba(58, 12, 10, 0.95));
+        border: 1px solid rgba(214, 184, 74, 0.65);
+        border-radius: 2px;
+        cursor: pointer;
+        box-shadow: 0 0 30px rgba(168, 52, 42, 0.25);
+        transition: background 0.2s, box-shadow 0.2s, color 0.2s;
+      }
+      .brief-button:hover,
+      .brief-button:focus-visible {
+        color: #fff6df;
+        background: linear-gradient(180deg, rgba(154, 39, 29, 0.95), rgba(80, 18, 14, 0.98));
+        box-shadow: 0 0 44px rgba(224, 90, 42, 0.45);
+        outline: none;
+      }
+      .brief-hint {
+        margin: 10px 0 0;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: #8d816e;
+      }
+      .brief-hint kbd { font-size: 9px; }
+
+      #triumph-toast {
+        position: fixed;
+        top: 252px;
+        right: 24px;
+        z-index: 35;
+        width: 268px;
+        padding: 12px 15px;
+        background: rgba(14, 16, 13, 0.92);
+        border: 1px solid rgba(214, 184, 74, 0.5);
+        border-left: 3px solid var(--gold);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        transform: translateX(14px);
+        transition: opacity 0.35s ease, transform 0.35s ease;
+        pointer-events: none;
+      }
+      #triumph-toast.is-visible { opacity: 1; transform: translateX(0); }
+      #triumph-toast .triumph-kicker {
+        display: block;
+        font-size: 9px;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      #triumph-toast b {
+        display: block;
+        margin: 3px 0;
+        font-family: "GodOfWar", "Cinzel", Georgia, serif;
+        font-size: 20px;
+        font-weight: 400;
+        letter-spacing: 0.06em;
+        color: #f3e9d0;
+      }
+      #triumph-toast span:last-child {
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 13px;
+        color: #aa9e88;
+      }
+
+      .death-wave {
+        margin: 2px 0 0;
+        font-size: 11px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: #8f816d;
+      }
+
+      @media (max-width: 760px) {
+        #voice-line { bottom: 104px; }
+        .minimap canvas { width: 120px; height: 120px; }
+        .controls { display: none; }
         .footer-hud { flex-direction: column; align-items: flex-start; }
+        .rage-track, .health-track { width: 130px; }
+        .brief-grid { grid-template-columns: 1fr; }
+        #triumph-list { grid-template-columns: 1fr 1fr; }
+        #triumph-toast { top: 170px; right: 12px; width: 230px; }
+        .brief-actions { bottom: -16px; margin-bottom: -12px; }
       }
     </style>
   </head>
@@ -209,11 +838,38 @@
 
     <header class="hud">
       <div class="brand">
-        <h1>Tufani</h1>
-        <p>the storm decides</p>
+        <h1>The God of Rage</h1>
+        <p>gods fall. the storm remains.</p>
       </div>
-      <span class="badge">prototype · 0.1</span>
+      <div class="hud-right">
+        <div class="minimap">
+          <canvas id="minimap" width="340" height="340"></canvas>
+          <span class="minimap-label">storm map</span>
+        </div>
+      </div>
     </header>
+
+    <div id="warning">outside the ring. move, or die.</div>
+    <div id="triumph-toast">
+      <span class="triumph-kicker">Triumph</span>
+      <b id="triumph-name"></b>
+      <span id="triumph-desc"></span>
+    </div>
+    <div id="voice-line"></div>
+
+    <div id="wave-banner"><span id="wave-banner-text">The hunt begins</span></div>
+
+    <div id="boss-bar">
+      <span id="boss-name">COLOSSUS</span>
+      <span class="boss-track"><i id="boss-fill"></i></span>
+    </div>
+
+    <div id="death-screen">
+      <p class="death-title">You died</p>
+      <p class="death-sub">The storm will return you in <span id="respawn-value">6</span></p>
+      <p class="death-kills"><span id="death-kills">0</span> slain</p>
+      <p class="death-wave">wave <span id="death-wave">1</span> / <span id="death-triumphs">0</span> triumphs</p>
+    </div>
 
     <div class="footer-hud">
       <div class="vitals">
@@ -222,14 +878,97 @@
           <span class="health-track"><i id="health-fill"></i></span>
           <span id="health-value">100</span>
         </div>
+        <div class="rage">
+          <span>rage</span>
+          <span class="rage-track"><i id="rage-fill"></i></span>
+          <span id="rage-value">0</span>
+          <kbd>Q</kbd>
+        </div>
+        <div class="weapon">
+          <span id="weapon-name">axe of the storm</span>
+          <kbd>E</kbd>
+        </div>
         <div class="chips">
           <span id="status">connecting…</span>
-          <span id="storm-status">storm incoming</span>
+          <span id="storm-status">the storm gathers</span>
+          <button id="help-toggle" type="button">rules</button>
+          <button id="sound-toggle" class="icon-button" type="button" aria-label="Sound on" title="Sound on">
+            <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
+              <path d="M16 8.5c1.4 1.4 1.4 5.6 0 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M18.6 6c2.6 2.6 2.6 9.4 0 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
+              <path d="M16 9l4 6M20 9l-4 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
       </div>
       <div class="controls">
-        <strong>move</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows<br />
-        open a second tab to drop another player in
+        <strong>move</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><br />
+        <strong>axe</strong> <kbd>LMB</kbd> / <kbd>Space</kbd><br />
+        <strong>rage</strong> <kbd>Q</kbd> <strong>rules</strong> <kbd>H</kbd>
+      </div>
+    </div>
+
+    <div id="brief">
+      <div class="brief-panel">
+        <header class="brief-head">
+          <p class="brief-kicker">the hunt</p>
+          <h2>Survive the storm. Slay the gods.</h2>
+          <p class="brief-lead">
+            The ring is the clock. Clear each wave. Every fifth wave, a colossus rises.
+          </p>
+        </header>
+        <div class="brief-grid">
+          <section class="brief-card">
+            <h3>The rules</h3>
+            <ol>
+              <li>Stay inside the ring. Outside it, the storm eats your health.</li>
+              <li>Clear every foe to call the next wave.</li>
+              <li>Die and you return at the storm's eye in six seconds. Your kills remain.</li>
+            </ol>
+          </section>
+          <section class="brief-card">
+            <h3>The axe</h3>
+            <p>Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Swing with <kbd>LMB</kbd> or <kbd>Space</kbd>. The cleave hits every foe around you.</p>
+            <p>Hits and kills fill <b>rage</b>. At full, press <kbd>Q</kbd> to double your damage for eight seconds.</p>
+          </section>
+          <section class="brief-card">
+            <h3>The foes</h3>
+            <ul class="foe-list">
+              <li><b>Draugr</b><span>fast and fragile, they come in packs</span></li>
+              <li><b>Troll</b><span>slow, heavy, and punishing</span></li>
+              <li><b>God</b><span>quick, armed, and jealous</span></li>
+              <li><b>Colossus</b><span>a walking mountain, every fifth wave</span></li>
+            </ul>
+          </section>
+          <section class="brief-card">
+            <h3>The storm</h3>
+            <p>The blue wall is death. The timer beside your health tells you when it moves. When it closes, the safe ground shrinks.</p>
+            <p>Watch the minimap. Gold is you. Red is them. The violet ring is the storm.</p>
+          </section>
+        </div>
+        <section class="brief-triumphs">
+          <div class="brief-triumphs-head">
+            <h3>Triumphs</h3>
+            <span id="brief-triumph-count">0 / 9</span>
+          </div>
+          <ul id="triumph-list"></ul>
+        </section>
+        <div class="brief-actions">
+          <button id="brief-action" class="brief-button" type="button">Begin the hunt</button>
+          <p class="brief-hint">Press <kbd>Enter</kbd> to begin. Press <kbd>H</kbd> any time for this brief.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="loading">
+      <div class="loading-inner">
+        <p class="loading-mark">The God of Rage</p>
+        <p class="loading-sub">gods fall. the storm remains.</p>
+        <div class="loading-bar"><i></i></div>
       </div>
     </div>
 

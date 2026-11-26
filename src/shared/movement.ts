@@ -16,7 +16,7 @@ const clamp = (value: number, min: number, max: number) =>
  * input) and by the client reconciler (predict, then replay on rollback).
  *
  * Pure function of (state, input, dt): no clocks, no randomness, no reads
- * outside its arguments. That is the whole contract — break it and the client's
+ * outside its arguments. That is the whole contract - break it and the client's
  * prediction drifts from the server every time.
  */
 export function stepEntity(entity: EntityState, input: MoveInputLike, dt: number): void {

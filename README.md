@@ -1,23 +1,15 @@
-# Tufani
+# The God of Rage
 
-> the storm decides.
+> Gods fall. The storm remains.
 
-Tufani is a lite, browser-based battle royale. Small island, short matches, one shrinking storm, last player standing. No install, no launcher — open a URL and drop in.
+A mythic, browser-based action prototype on a storm-wracked island. A
+Kratos-shaped thunder god, an axe, and an endless hunt through draugr, trolls,
+jealous gods and colossi while the storm closes in.
 
-This is the playable prototype: authoritative movement, client-side prediction, reconnection, a shrinking storm and a 3D island rendered with Three.js.
+Built with Three.js + Colyseus: authoritative combat, client-side prediction,
+procedural scenery, and a full voice pack.
 
-## Stack
-
-| Layer | Choice |
-|---|---|
-| Client | Three.js + Vite + TypeScript |
-| Server | Colyseus 0.18 (authoritative rooms, fixed 30 Hz tick) |
-| Netcode | server input buffer + client prediction + interpolation |
-| Physics | flat-ground movement for now; Rapier comes with loot/collision |
-
-The client and server share one deterministic movement step (`src/shared/movement.ts`), so prediction and authority never disagree.
-
-## Run it
+## Play
 
 Requires Node 20.19+ (22 LTS recommended).
 
@@ -26,61 +18,91 @@ npm install
 npm start
 ```
 
-Open the URL Vite prints (usually <http://localhost:5173>). Open a second tab to see another player. The Colyseus rooms, `/playground` and `/monitor` share that port in development.
+Open the URL Vite prints (usually <http://localhost:5173>). Open a second tab
+to bring an ally into the same hunt.
+
+| Action | Input |
+|---|---|
+| Move | `W` `A` `S` `D` or arrow keys |
+| Axe | Left mouse / `Space` |
+| Rage | `Q` (when the rage meter is full) |
+
+The storm still shrinks. Outside the ring it eats your health. Dying returns you
+at the storm's eye after a short count.
+
+## What is in the prototype
+
+- A Kratos-like thunder god with a rune-lit axe, shield, red war paint and a
+  walk/attack animation set built entirely from procedural geometry.
+- Server-authoritative wave combat: draugr packs, trolls, gods and a colossus
+  boss every fifth wave.
+- Rage meter: every axe hit fills it, `Q` doubles your damage for eight seconds.
+- Death and respawn, boss health bar, kill counter, wave banners, melee hit
+  sparks, camera shake and screen burn.
+- A hand-built island: ruined colonnade, braziers, banners, a floating storm
+  relic, leviathan bones, watchtowers, ponds, drop pods, a forest ring, sea
+  stacks, dusk sky, aurora, stars, a moon and floating islets.
+- Authored voice pack in `public/voices/`, optional and subtitle-backed.
+- The GODOFWAR display font for titles; Cinzel for readable UI.
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Client | Three.js + Vite + TypeScript |
+| Server | Colyseus 0.18 (authoritative rooms, fixed 30 Hz tick) |
+| Netcode | input buffer + client prediction + interpolation |
+| Combat | server-resolved axe cleaves, enemy steering, wave director |
+| Physics | flat-ground movement; no prop collision yet |
+
+`src/shared/movement.ts` is the one deterministic step both sides run, so
+prediction and authority never disagree.
+
+## Scripts
 
 ```bash
 npm test        # boots a real server, connects a real client
 npm run build   # client + server
 npm run loadtest
+./scripts/generate-voices.sh   # rebuilds the voice pack (macOS + ffmpeg)
 ```
-
-## Controls
-
-| Action | Input |
-|---|---|
-| Move | `W` `A` `S` `D` or arrow keys |
-
-Mouse aim, shooting and loot are next on the list.
-
-## How a match will play
-
-1. Open the URL, join the arena.
-2. Loot a weapon, ammo, armor and medkits.
-3. The storm closes in five phases; outside it you take damage.
-4. Last player standing wins.
-
-Target format: **16–32 players**, **8–10 minute matches**, **third-person**, small island with a handful of points of interest.
 
 ## Project layout
 
 ```
-index.html                     HUD, canvas mount, controls
-src/app.config.ts              server definition (rooms, routes, dev tools)
-src/rooms/ArenaRoom.ts         room lifecycle, input buffer, fixed tick
-src/rooms/schema/ArenaState.ts synchronized state + input schema
-src/shared/movement.ts         the one step both sides run
-src/shared/constants.ts        tick rate, island size, speed
-src/client/index.ts            Three.js scene, prediction, camera
-test/ArenaRoom.test.ts         integration test against a real server
+index.html                       HUD, loading screen, display font
+public/GODOFWAR.TTF              God-of-War-style display font
+public/voices/                   generated voice pack
+scripts/generate-voices.sh       voice-pack generator
+src/app.config.ts                server definition (rooms, routes)
+src/rooms/ArenaRoom.ts           waves, enemy AI, axe resolution, respawn
+src/rooms/schema/ArenaState.ts   synced state + enemy/combat constants
+src/shared/movement.ts           the one step both sides run
+src/shared/constants.ts          tick rate, island size, speed
+src/client/index.ts              scene wiring, input, HUD, minimap
+src/client/audio.ts              voice pack + subtitles
+src/client/world/                sky, island, water, props, enemies,
+                                 character, storm, effects, post-processing
 ```
 
 ## Roadmap
 
 - [x] Authoritative movement at 30 Hz with client prediction
-- [x] Reconnection window and deterministic spawns
-- [x] 3D island, third-person camera, HUD
-- [x] Storm phases, health and damage outside the ring
-- [ ] Hitscan weapons and server-validated hit registration
-- [ ] Loot: ammo, armor, medkits
-- [ ] Bots to fill lobbies
-- [ ] Kill feed, spectate, win screen
+- [x] Melee combat, rage, waves, boss waves, respawn
+- [x] Island scenery, dusk/aurora sky, floating islets
+- [x] Voice pack with subtitles
+- [ ] Parry, shield block and a light/heavy combo
+- [ ] Loot, rune upgrades and a weapon swap
+- [ ] Enemy collision and a proper navigation graph
+- [ ] Named gods with unique move sets
+- [ ] Win screen, leaderboard and a run summary
 - [ ] Mobile controls
-- [ ] Accounts and leaderboard (keep this in Ruby/Rails)
 
 ## Name
 
-**Tufani** is Kiswahili for *storm*. The storm is the clock, the pressure and the reason matches end.
+**The God of Rage** is the name the island gives the one who refuses to fall.
 
-## License
+## Credits
 
-MIT
+Three.js, Colyseus, and the players who keep the storm alive. The
+`GODOFWAR.TTF` display face was supplied with the project.

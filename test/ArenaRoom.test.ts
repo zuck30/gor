@@ -55,7 +55,7 @@ describe("testing your Colyseus app", () => {
     await room.waitForNextTimestep();
 
     // The room steps once per received input, so one input is exactly one step
-    // of travel — at moveX clamped to 1, not the 100 the client asked for.
+    // of travel - at moveX clamped to 1, not the 100 the client asked for.
     assert.strictEqual(player.x, startX + PLAYER_SPEED * (1 / TICK_RATE));
   });
 

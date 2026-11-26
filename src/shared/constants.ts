@@ -5,11 +5,14 @@ export const TICK_RATE = 30;
 export const ARENA_WIDTH = 1000;
 export const ARENA_HEIGHT = 1000;
 
-/** Half-extent of a player square, used for wall clamping. */
-export const PLAYER_HALF = 12;
+/**
+ * Half-extent of a player square, used for wall clamping. Characters are ~6.5
+ * units tall, so this is roughly one body width of breathing room at the wall.
+ */
+export const PLAYER_HALF = 6;
 
-/** Units per second at full stick. */
-export const PLAYER_SPEED = 260;
+/** Units per second at full stick - a believable sprint for a 6.5-unit body. */
+export const PLAYER_SPEED = 64;
 
 /** Everyone drops in with the same pool; the storm is the only damage source for now. */
 export const MAX_HEALTH = 100;

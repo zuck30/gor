@@ -1,8 +1,8 @@
 {
   "private": true,
-  "name": "tufani",
+  "name": "the-god-of-rage",
   "version": "0.1.0",
-  "description": "Tufani \u2014 a lite, browser-based battle royale. The storm decides.",
+  "description": "The God of Rage. A mythic browser action game on a storm-wracked island.",
   "type": "module",
   "engines": {
     "node": ">=20.19.0"
