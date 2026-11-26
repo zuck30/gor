@@ -125,7 +125,8 @@
         border-radius: 4px;
       }
 
-      #status {
+      #status,
+      #storm-status {
         padding: 9px 13px;
         font-size: 11px;
         letter-spacing: 0.12em;
@@ -135,6 +136,67 @@
         border: 1px solid var(--line);
         border-radius: 999px;
         backdrop-filter: blur(8px);
+      }
+
+      #storm-status {
+        color: var(--gold);
+        transition: color 0.3s, border-color 0.3s;
+      }
+
+      #storm-status.is-closing {
+        color: #ff8f6b;
+        border-color: rgba(255, 143, 107, 0.5);
+      }
+
+      .vitals {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .health {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 13px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        backdrop-filter: blur(8px);
+      }
+
+      .health-track {
+        width: clamp(120px, 18vw, 180px);
+        height: 6px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+      }
+
+      #health-fill {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: var(--gold);
+        transition: width 0.15s linear, background 0.3s;
+      }
+
+      #health-fill.low { background: #e05a5a; }
+
+      #health-value {
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
       }
 
       @media (max-width: 640px) {
@@ -154,7 +216,17 @@
     </header>
 
     <div class="footer-hud">
-      <div id="status">connecting…</div>
+      <div class="vitals">
+        <div class="health">
+          <span>hp</span>
+          <span class="health-track"><i id="health-fill"></i></span>
+          <span id="health-value">100</span>
+        </div>
+        <div class="chips">
+          <span id="status">connecting…</span>
+          <span id="storm-status">storm incoming</span>
+        </div>
+      </div>
       <div class="controls">
         <strong>move</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrows<br />
         open a second tab to drop another player in

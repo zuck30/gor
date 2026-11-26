@@ -3,7 +3,12 @@ import { ColyseusTestServer, boot } from "@colyseus/testing";
 
 import appConfig from "../src/app.config.js";
 import { ArenaState, type MoveInput } from "../src/rooms/schema/ArenaState.js";
-import { PLAYER_SPEED, TICK_RATE } from "../src/shared/constants.js";
+import {
+  MAX_HEALTH,
+  PLAYER_SPEED,
+  STORM_START_RADIUS,
+  TICK_RATE,
+} from "../src/shared/constants.js";
 
 describe("testing your Colyseus app", () => {
   let colyseus: ColyseusTestServer<typeof appConfig>;
@@ -52,5 +57,20 @@ describe("testing your Colyseus app", () => {
     // The room steps once per received input, so one input is exactly one step
     // of travel — at moveX clamped to 1, not the 100 the client asked for.
     assert.strictEqual(player.x, startX + PLAYER_SPEED * (1 / TICK_RATE));
+  });
+
+  it("spawns a full-health player inside the opening storm", async () => {
+    const room = await colyseus.createRoom<ArenaState>("arena", {});
+    const client1 = await colyseus.connectTo(room);
+
+    const player = room.state.players.get(client1.sessionId);
+    assert.ok(player, "a Player is created on join");
+    assert.strictEqual(player.health, MAX_HEALTH);
+    assert.strictEqual(player.alive, true);
+
+    assert.strictEqual(room.state.stormMode, 0, "the first phase holds");
+    assert.strictEqual(room.state.stormPhase, 0);
+    assert.strictEqual(room.state.stormRadius, STORM_START_RADIUS);
+    assert.ok(room.state.stormTimer > 0 && room.state.stormTimer <= 30);
   });
 });

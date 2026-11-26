@@ -4,10 +4,13 @@ import { Predict } from "@colyseus/sdk/predict";
 import type { default as server } from "../app.config.js";
 import type { MoveInput } from "../rooms/schema/ArenaState.js";
 import { stepEntity } from "../shared/movement.js";
-import { ARENA_WIDTH, ARENA_HEIGHT } from "../shared/constants.js";
+import { ARENA_WIDTH, ARENA_HEIGHT, STORM_PHASES } from "../shared/constants.js";
 
 const statusEl = document.getElementById("status")!;
 const appEl = document.getElementById("app")!;
+const healthFill = document.getElementById("health-fill") as HTMLElement;
+const healthValue = document.getElementById("health-value")!;
+const stormStatusEl = document.getElementById("storm-status")!;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -28,7 +31,7 @@ const camera = new THREE.PerspectiveCamera(
   55,
   window.innerWidth / window.innerHeight,
   0.1,
-  600
+  1200
 );
 camera.position.set(0, 12, 18);
 
@@ -109,6 +112,40 @@ for (const [x, z, w, d] of walls) {
   wall.receiveShadow = true;
   scene.add(wall);
 }
+
+// ---------------------------------------------------------------- storm
+// The circle is drawn from the same numbers the server uses for damage, so
+// what you see is exactly where the tick will hurt you.
+const STORM_WALL_HEIGHT = 80;
+
+const stormWall = new THREE.Mesh(
+  new THREE.CylinderGeometry(1, 1, 1, 128, 1, true),
+  new THREE.MeshBasicMaterial({
+    color: 0x6fd3ff,
+    transparent: true,
+    opacity: 0.12,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    fog: false,
+  })
+);
+stormWall.position.y = STORM_WALL_HEIGHT / 2;
+scene.add(stormWall);
+
+const stormEdge = new THREE.Mesh(
+  new THREE.RingGeometry(0.985, 1, 128),
+  new THREE.MeshBasicMaterial({
+    color: 0x6fd3ff,
+    transparent: true,
+    opacity: 0.7,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    fog: false,
+  })
+);
+stormEdge.rotation.x = -Math.PI / 2;
+stormEdge.position.y = 0.06;
+scene.add(stormEdge);
 
 // ---------------------------------------------------------------- players
 const bodyGeometry = new THREE.CapsuleGeometry(0.9, 1.5, 6, 12);
@@ -193,8 +230,45 @@ async function main() {
   const meshes = new Map<string, THREE.Group>();
   const callbacks = Callbacks.get(room);
 
-  function updateStatus() {
-    statusEl.textContent = `connected · ${room.state.players.size} in the storm`;
+  function syncStorm() {
+    const radius = room.state.stormRadius;
+    const x = toWorldX(room.state.stormX);
+    const z = toWorldZ(room.state.stormY);
+
+    stormWall.scale.set(radius, STORM_WALL_HEIGHT, radius);
+    stormWall.position.set(x, STORM_WALL_HEIGHT / 2, z);
+
+    stormEdge.scale.setScalar(radius);
+    stormEdge.position.set(x, 0.06, z);
+  }
+
+  function updateHud() {
+    const hp = Math.max(0, Math.round(self.health));
+    healthFill.style.width = `${hp}%`;
+    healthFill.classList.toggle("low", hp <= 30);
+    healthValue.textContent = String(hp);
+
+    const mode = room.state.stormMode;
+    const seconds = Math.ceil(room.state.stormTimer);
+    const stormText =
+      mode === 0 ? `storm closes in ${seconds}s`
+      : mode === 1 ? `storm closing · ${seconds}s`
+      : "final storm";
+    if (stormText !== stormStatusEl.textContent) {
+      stormStatusEl.textContent = stormText;
+      stormStatusEl.classList.toggle("is-closing", mode === 1);
+    }
+
+    let alive = 0;
+    for (const [, player] of room.state.players) {
+      if (player.alive) { alive += 1; }
+    }
+    const statusText = self.alive
+      ? `connected · ${alive} alive · phase ${Math.min(room.state.stormPhase + 1, STORM_PHASES.length)}`
+      : "eliminated — the storm took you";
+    if (statusText !== statusEl.textContent) {
+      statusEl.textContent = statusText;
+    }
   }
 
   callbacks.onAdd("players", (_player, sessionId) => {
@@ -202,7 +276,6 @@ async function main() {
     mesh.position.set(0, 0, 0);
     scene.add(mesh);
     meshes.set(sessionId, mesh);
-    updateStatus();
   });
 
   callbacks.onRemove("players", (_player, sessionId) => {
@@ -211,14 +284,11 @@ async function main() {
       scene.remove(mesh);
       meshes.delete(sessionId);
     }
-    updateStatus();
   });
 
   room.onLeave(() => {
     statusEl.textContent = "disconnected";
   });
-
-  updateStatus();
 
   const startX = toWorldX(self.x);
   const startZ = toWorldZ(self.y);
@@ -245,6 +315,7 @@ async function main() {
       }
       mesh.position.x = toWorldX(predict.value(player, "x"));
       mesh.position.z = toWorldZ(predict.value(player, "y"));
+      mesh.visible = player.alive;
     }
 
     const dt = Math.min((now - lastTime) / 1000, 0.1);
@@ -256,6 +327,9 @@ async function main() {
     desiredCamera.set(px, 17, pz + 24);
     camera.position.lerp(desiredCamera, 1 - Math.exp(-12 * dt));
     camera.lookAt(cameraTarget);
+
+    syncStorm();
+    updateHud();
 
     renderer.render(scene, camera);
     requestAnimationFrame(frame);

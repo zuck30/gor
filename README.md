@@ -4,7 +4,7 @@
 
 Tufani is a lite, browser-based battle royale. Small island, short matches, one shrinking storm, last player standing. No install, no launcher — open a URL and drop in.
 
-This is the playable prototype: authoritative movement, client-side prediction, reconnection and a 3D island rendered with Three.js.
+This is the playable prototype: authoritative movement, client-side prediction, reconnection, a shrinking storm and a 3D island rendered with Three.js.
 
 ## Stack
 
@@ -40,13 +40,13 @@ npm run loadtest
 |---|---|
 | Move | `W` `A` `S` `D` or arrow keys |
 
-Mouse aim, shooting, loot and the storm are next on the list.
+Mouse aim, shooting and loot are next on the list.
 
 ## How a match will play
 
 1. Open the URL, join the arena.
 2. Loot a weapon, ammo, armor and medkits.
-3. The storm closes in four phases; outside it you take damage.
+3. The storm closes in five phases; outside it you take damage.
 4. Last player standing wins.
 
 Target format: **16–32 players**, **8–10 minute matches**, **third-person**, small island with a handful of points of interest.
@@ -69,7 +69,7 @@ test/ArenaRoom.test.ts         integration test against a real server
 - [x] Authoritative movement at 30 Hz with client prediction
 - [x] Reconnection window and deterministic spawns
 - [x] 3D island, third-person camera, HUD
-- [ ] Storm phases and damage outside the ring
+- [x] Storm phases, health and damage outside the ring
 - [ ] Hitscan weapons and server-validated hit registration
 - [ ] Loot: ammo, armor, medkits
 - [ ] Bots to fill lobbies
