@@ -30,12 +30,6 @@ Three chain-blade swings in a row hurl both blades at the nearest enemy.
 Client: Vercel, using `vercel.json`.
 Server: Render, using `render.yaml` and `server-production.mjs`.
 
-`.env` already points at the Render arena:
-
-```env
-VITE_SERVER_URL=https://gor-arena.onrender.com
-```
-
 **License**
 
 MIT
