@@ -65,6 +65,11 @@ const comboPips = document.getElementById("combo-pips")!;
 const comboPipItems = Array.from(comboPips.querySelectorAll("i"));
 const cinematicEl = document.getElementById("cinematic")!;
 const thunderFlashEl = document.getElementById("thunder-flash") as HTMLElement;
+const touchStick = document.getElementById("touch-stick") as HTMLElement | null;
+const touchKnob = document.getElementById("touch-knob") as HTMLElement | null;
+const touchAttack = document.getElementById("touch-attack") as HTMLButtonElement | null;
+const touchRage = document.getElementById("touch-rage") as HTMLButtonElement | null;
+const touchSwap = document.getElementById("touch-swap") as HTMLButtonElement | null;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -118,12 +123,18 @@ const board = new TriumphBoard((triumph) => {
 
 renderTriumphs();
 
+const touchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+if (touchDevice) {
+  document.body.classList.add("touch-device");
+}
+const renderPixelRatio = Math.min(window.devicePixelRatio, touchDevice ? 1.5 : 2);
+
 // ---------------------------------------------------------------- renderer
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
   powerPreference: "high-performance",
 });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(renderPixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -152,7 +163,7 @@ scene.add(hemisphere);
 
 const sun = new THREE.DirectionalLight(0xffb078, 2.4);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(touchDevice ? 1024 : 2048, touchDevice ? 1024 : 2048);
 sun.shadow.camera.left = -120;
 sun.shadow.camera.right = 120;
 sun.shadow.camera.top = 120;
@@ -199,7 +210,7 @@ scene.add(storm.group);
 const fx = createCombatFX();
 scene.add(fx.group);
 
-const postfx = createPostFX(renderer, scene, camera);
+const postfx = createPostFX(renderer, scene, camera, renderPixelRatio);
 
 if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
   (window as any).__godofrage = { scene, camera, renderer, island, water, sky, storm, props, fx };
@@ -212,6 +223,87 @@ let specialQueued = false;
 let mouseHeld = false;
 let lastMouseAttack = -1e9;
 let switchQueued = false;
+let touchAxisX: -1 | 0 | 1 = 0;
+let touchAxisY: -1 | 0 | 1 = 0;
+let touchActive = false;
+let touchStickId: number | null = null;
+const TOUCH_RADIUS = 42;
+
+function updateTouchStick(dx: number, dy: number) {
+  const length = Math.hypot(dx, dy);
+  const scale = length > TOUCH_RADIUS ? TOUCH_RADIUS / length : 1;
+  const kx = dx * scale;
+  const ky = dy * scale;
+  if (touchKnob) {
+    touchKnob.style.transform = `translate(-50%, -50%) translate(${kx}px, ${ky}px)`;
+  }
+  const dead = 9;
+  touchAxisX = length < dead ? 0 : dx > dead ? 1 : dx < -dead ? -1 : 0;
+  touchAxisY = length < dead ? 0 : dy > dead ? 1 : dy < -dead ? -1 : 0;
+  touchActive = touchAxisX !== 0 || touchAxisY !== 0;
+}
+
+function releaseTouchStick() {
+  touchStickId = null;
+  touchAxisX = 0;
+  touchAxisY = 0;
+  touchActive = false;
+  if (touchKnob) {
+    touchKnob.style.transform = "translate(-50%, -50%)";
+  }
+}
+
+touchStick?.addEventListener("touchstart", (event) => {
+  if (touchStickId !== null) { return; }
+  event.preventDefault();
+  const touch = event.changedTouches[0];
+  touchStickId = touch.identifier;
+  const rect = touchStick.getBoundingClientRect();
+  updateTouchStick(
+    touch.clientX - (rect.left + rect.width / 2),
+    touch.clientY - (rect.top + rect.height / 2)
+  );
+}, { passive: false });
+
+touchStick?.addEventListener("touchmove", (event) => {
+  if (touchStickId === null) { return; }
+  event.preventDefault();
+  const touch = Array.from(event.touches).find((t) => t.identifier === touchStickId);
+  if (!touch) { return; }
+  const rect = touchStick.getBoundingClientRect();
+  updateTouchStick(
+    touch.clientX - (rect.left + rect.width / 2),
+    touch.clientY - (rect.top + rect.height / 2)
+  );
+}, { passive: false });
+
+const endTouchStick = (event: TouchEvent) => {
+  if (touchStickId === null) { return; }
+  const ended = Array.from(event.changedTouches).some((t) => t.identifier === touchStickId);
+  if (ended) { releaseTouchStick(); }
+};
+touchStick?.addEventListener("touchend", endTouchStick);
+touchStick?.addEventListener("touchcancel", endTouchStick);
+
+touchAttack?.addEventListener("touchstart", (event) => {
+  event.preventDefault();
+  attackQueued = true;
+  mouseHeld = true;
+  lastMouseAttack = performance.now();
+}, { passive: false });
+const releaseTouchAttack = () => { mouseHeld = false; };
+touchAttack?.addEventListener("touchend", releaseTouchAttack);
+touchAttack?.addEventListener("touchcancel", releaseTouchAttack);
+
+touchRage?.addEventListener("touchstart", (event) => {
+  event.preventDefault();
+  specialQueued = true;
+}, { passive: false });
+
+touchSwap?.addEventListener("touchstart", (event) => {
+  event.preventDefault();
+  switchQueued = true;
+}, { passive: false });
 
 addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
@@ -792,8 +884,10 @@ async function main() {
         continue;
       }
 
-      input.data.moveX = axis(["a", "arrowleft"], ["d", "arrowright"]);
-      input.data.moveY = axis(["w", "arrowup"], ["s", "arrowdown"]);
+      const keyboardX = axis(["a", "arrowleft"], ["d", "arrowright"]);
+      const keyboardY = axis(["w", "arrowup"], ["s", "arrowdown"]);
+      input.data.moveX = touchActive ? touchAxisX : keyboardX;
+      input.data.moveY = touchActive ? touchAxisY : keyboardY;
       input.data.attack = 0;
       input.data.special = 0;
       input.data.switchWeapon = 0;

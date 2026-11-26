@@ -73,11 +73,12 @@ export interface PostFX {
 export function createPostFX(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
-  camera: THREE.Camera
+  camera: THREE.Camera,
+  pixelRatio = Math.min(window.devicePixelRatio, 2)
 ): PostFX {
   const size = new THREE.Vector2(window.innerWidth, window.innerHeight);
   const composer = new EffectComposer(renderer);
-  composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  composer.setPixelRatio(pixelRatio);
 
   const renderPass = new RenderPass(scene, camera);
   composer.addPass(renderPass);
@@ -102,7 +103,7 @@ export function createPostFX(
     },
     resize(width, height) {
       size.set(width, height);
-      composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      composer.setPixelRatio(pixelRatio);
       composer.setSize(width, height);
       finalPass.uniforms.uResolution.value.set(width, height);
       bloom.setSize(width, height);
