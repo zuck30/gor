@@ -3,7 +3,7 @@
 Mwanafyale, the God of Rage. A browser action game on a storm-wracked island.
 Fight waves of draugr, trolls, gods, and colossi while the storm closes in.
 
-## Run
+**Run**
 
 ```bash
 npm install
@@ -12,7 +12,7 @@ npm start
 
 Open `http://localhost:5173`.
 
-## Controls
+**Controls**
 
 | Action | Input |
 |---|---|
@@ -25,7 +25,7 @@ Open `http://localhost:5173`.
 
 Three chain-blade swings in a row hurl both blades at the nearest enemy.
 
-## Deploy
+**Deploy**
 
 Client: Vercel, using `vercel.json`.
 Server: Render, using `render.yaml` and `server-production.mjs`.
@@ -36,6 +36,6 @@ Server: Render, using `render.yaml` and `server-production.mjs`.
 VITE_SERVER_URL=https://gor-arena.onrender.com
 ```
 
-## License
+**License**
 
 MIT
