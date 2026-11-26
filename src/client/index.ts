@@ -236,9 +236,28 @@ function axis(negative: string[], positive: string[]): -1 | 0 | 1 {
 }
 
 // ---------------------------------------------------------------- game
-const client = new ColyseusSDK<typeof server>(
-  `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`
-);
+
+/**
+ * On Vercel the client is static, so the room server lives elsewhere. Set
+ * VITE_SERVER_URL at build time (for example wss://tufani-server.fly.dev).
+ * Local development falls back to the Vite host, which also runs Colyseus.
+ */
+function serverEndpoint(): string {
+  const configured = (import.meta as any).env?.VITE_SERVER_URL as string | undefined;
+  if (!configured) {
+    return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+  }
+  try {
+    const url = new URL(configured, location.origin);
+    const protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss" : "ws";
+    const path = url.pathname.replace(/\/$/, "");
+    return `${protocol}://${url.host}${path}`;
+  } catch {
+    return configured;
+  }
+}
+
+const client = new ColyseusSDK<typeof server>(serverEndpoint());
 
 interface PlayerRig {
   rig: CharacterRig;
@@ -344,7 +363,7 @@ async function main() {
       return existing;
     }
     const isSelf = sessionId === room.sessionId;
-    const label = isSelf ? "YOU" : `ALLY ${sessionId.slice(0, 4).toUpperCase()}`;
+    const label = isSelf ? "MWANAFYALE" : `ALLY ${sessionId.slice(0, 4).toUpperCase()}`;
     const rig = createCharacter({ isSelf, sessionId, label });
     scene.add(rig.group);
     const entry = { rig, label };
@@ -430,7 +449,11 @@ async function main() {
     rageRow.classList.toggle("is-full", rage >= 100 || self.raging);
     rageFill.classList.toggle("is-full", rage >= 100 || self.raging);
 
-    weaponNameEl.textContent = self.weapon === 1 ? "sword of god" : "axe of the storm";
+    weaponNameEl.textContent = self.weapon === 1
+      ? "sword of god"
+      : self.weapon === 2
+        ? "chain blades"
+        : "axe of the storm";
 
     const mode = room.state.stormMode;
     const seconds = Math.ceil(room.state.stormTimer);
@@ -648,6 +671,7 @@ async function main() {
   let lastOutside = -100;
   let lastKillCall = -100;
   let lastHitVoice = -100;
+  let rageSpokenAt = -100;
   let defeatTimer = 0;
   let lastRage = false;
   let deaths = 0;
@@ -705,8 +729,10 @@ async function main() {
       if (i === 0 && attackQueued) {
         input.data.attack = 1;
         attackQueued = false;
-        selfRig?.rig.attack(self.weapon === 1 ? 0.32 : 0.48);
-        if (self.weapon === 1) {
+        selfRig?.rig.attack(
+          self.weapon === 1 ? 0.32 : self.weapon === 2 ? 0.4 : 0.48
+        );
+        if (self.weapon !== 0) {
           voices.playSfx("sword");
         }
         fx.swing(toWorldX(self.x), toWorldZ(self.y));
@@ -714,6 +740,10 @@ async function main() {
       if (i === 0 && specialQueued) {
         input.data.special = 1;
         specialQueued = false;
+        if (self.rage >= 100 && !self.raging) {
+          voices.play("rage");
+          rageSpokenAt = elapsed;
+        }
       }
 
       input.send();
@@ -912,7 +942,9 @@ async function main() {
 
     if (self.raging && !lastRage) {
       announce("Rage of the storm", 1800);
-      voices.play("rage");
+      if (elapsed - rageSpokenAt > 0.8) {
+        voices.play("rage");
+      }
       board.award("rage");
     }
     lastRage = self.raging;
@@ -979,6 +1011,11 @@ main().catch((error) => {
   const message = document.createElement("p");
   message.textContent = "The storm could not reach this arena. Is the server running?";
   loadingEl.appendChild(message);
+  if (!(import.meta as any).env?.VITE_SERVER_URL && location.hostname !== "localhost") {
+    const hint = document.createElement("p");
+    hint.textContent = "Static deployment: set VITE_SERVER_URL to the public Colyseus server.";
+    loadingEl.appendChild(hint);
+  }
   loadingEl.classList.add("has-error");
 });
 

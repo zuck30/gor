@@ -56,6 +56,16 @@ export const WEAPONS = {
     healOnHit: 3,
     healOnKill: 18,
   },
+  chain: {
+    name: "Chain Blades",
+    damage: 64,
+    range: 46,
+    cooldown: 0.42,
+    ragePerHit: 5,
+    cleave: true,
+    healOnHit: 0,
+    healOnKill: 0,
+  },
 } as const;
 
 export type WeaponKind = keyof typeof WEAPONS;

@@ -2,9 +2,9 @@
 
 > Gods fall. The storm remains.
 
-A mythic, browser-based action prototype on a storm-wracked island. A
-Kratos-shaped thunder god, an axe, and an endless hunt through draugr, trolls,
-jealous gods and colossi while the storm closes in.
+A mythic, browser-based action prototype on a storm-wracked island. Mwanafyale,
+the God of Rage, a chain-blade warrior, and an endless hunt through draugr,
+trolls, jealous gods and colossi while the storm closes in.
 
 Built with Three.js + Colyseus: authoritative combat, client-side prediction,
 procedural scenery, and a full voice pack.
@@ -58,6 +58,39 @@ at the storm's eye after a short count.
 `src/shared/movement.ts` is the one deterministic step both sides run, so
 prediction and authority never disagree.
 
+## Deploy
+
+### Client on Vercel
+
+The repo includes `vercel.json`, so Vercel builds the static client with:
+
+```bash
+npm run build:client
+```
+
+Output: `dist/client`. The included rewrite serves `index.html` for the app route.
+
+A static Vercel deployment cannot host the Colyseus WebSocket room server. Set
+`VITE_SERVER_URL` in the Vercel project to the public server, for example:
+
+```text
+wss://your-colyseus-server.example.com
+```
+
+Then redeploy. Without that variable the page loads but cannot join the arena.
+
+### Room server
+
+Deploy the server separately on a host that supports long-lived WebSockets
+(Fly.io, Render, Railway, a VPS, or Colyseus Cloud):
+
+```bash
+npm run build
+node dist/server/server.mjs
+```
+
+Point `VITE_SERVER_URL` at that host.
+
 ## Scripts
 
 ```bash
@@ -100,7 +133,8 @@ src/client/world/                sky, island, water, props, enemies,
 
 ## Name
 
-**The God of Rage** is the name the island gives the one who refuses to fall.
+**Mwanafyale** is the warrior. **The God of Rage** is the name the island gives
+him when he refuses to fall.
 
 ## Credits
 

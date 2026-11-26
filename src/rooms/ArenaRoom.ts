@@ -124,6 +124,12 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
           this.spawnEnemy(kind as EnemyKind, Math.max(1, this.state.wave));
         }
       });
+      this.onMessage("cheatRage", (client) => {
+        const player = this.state.players.get(client.sessionId);
+        if (player) {
+          player.rage = PLAYER_RAGE.max;
+        }
+      });
     }
 
     this.setFixedTimestep((ctx) => this.step(ctx), TICK_RATE);
@@ -146,7 +152,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       health: MAX_HEALTH,
       alive: true,
       kills: 0,
-      weapon: 0,
+      weapon: 2,
       rage: 0,
       raging: false,
       respawnTimer: 0,
@@ -292,7 +298,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private swingWeapon(sessionId: string, player: Player) {
-    const weapon = player.weapon === 1 ? WEAPONS.sword : WEAPONS.axe;
+    const weapon = player.weapon === 1
+      ? WEAPONS.sword
+      : player.weapon === 2
+        ? WEAPONS.chain
+        : WEAPONS.axe;
     const multiplier = player.raging ? PLAYER_ATTACK.rageDamage : 1;
     const damage = weapon.damage * multiplier;
     let connected = false;
@@ -594,7 +604,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
           stepEntity(player, input, dt);
 
           if (input.switchWeapon) {
-            player.weapon = player.weapon === 1 ? 0 : 1;
+            player.weapon = (player.weapon + 1) % 3;
             this.attackCooldown.set(sessionId, Math.max(0.2, this.attackCooldown.get(sessionId) ?? 0));
           }
           if (input.special) {

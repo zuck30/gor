@@ -4,22 +4,62 @@ import { makeGlowTexture, makeNameTexture, makeToonGradient } from "./textures.j
 
 const toonGradient = makeToonGradient();
 const outlineMaterial = new THREE.MeshBasicMaterial({
-  color: 0x0d100e,
+  color: 0x0c0b0a,
   side: THREE.BackSide,
 });
 
-const skinMaterial = new THREE.MeshToonMaterial({ color: 0xd7a982, gradientMap: toonGradient });
-const leatherMaterial = new THREE.MeshToonMaterial({ color: 0x4a3324, gradientMap: toonGradient });
-const furMaterial = new THREE.MeshToonMaterial({ color: 0x6a5137, gradientMap: toonGradient });
-const armorMaterial = new THREE.MeshToonMaterial({ color: 0x5f636b, gradientMap: toonGradient });
-const darkMetalMaterial = new THREE.MeshToonMaterial({ color: 0x343940, gradientMap: toonGradient });
-const beardMaterial = new THREE.MeshToonMaterial({ color: 0x38302a, gradientMap: toonGradient });
-const tattooMaterial = new THREE.MeshStandardMaterial({
-  color: 0x9e2f26,
-  emissive: 0x5e0f0b,
-  emissiveIntensity: 0.55,
-  roughness: 0.7,
+// A dark-skinned storm warrior, built for silhouettes at chase-camera distance.
+const skinMaterial = new THREE.MeshToonMaterial({ color: 0x6e4630, gradientMap: toonGradient });
+const leatherMaterial = new THREE.MeshToonMaterial({ color: 0x2b211d, gradientMap: toonGradient });
+const pantsMaterial = new THREE.MeshToonMaterial({ color: 0x1c2028, gradientMap: toonGradient });
+const blueClothMaterial = new THREE.MeshToonMaterial({
+  color: 0x1d2f4d,
+  gradientMap: toonGradient,
+  side: THREE.DoubleSide,
 });
+const silverMaterial = new THREE.MeshStandardMaterial({
+  color: 0xc4ccd5,
+  metalness: 0.88,
+  roughness: 0.28,
+});
+const darkSilverMaterial = new THREE.MeshStandardMaterial({
+  color: 0x737d87,
+  metalness: 0.8,
+  roughness: 0.36,
+});
+const dreadMaterial = new THREE.MeshToonMaterial({ color: 0x1a1411, gradientMap: toonGradient });
+const lightningMaterial = new THREE.MeshStandardMaterial({
+  color: 0xaef4ff,
+  emissive: 0x2fb6ff,
+  emissiveIntensity: 2.8,
+  roughness: 0.22,
+});
+const chainMaterial = new THREE.MeshStandardMaterial({
+  color: 0x9aa4ae,
+  metalness: 0.92,
+  roughness: 0.32,
+});
+const bladeMaterial = new THREE.MeshStandardMaterial({
+  color: 0x8d99a6,
+  metalness: 0.85,
+  roughness: 0.26,
+});
+const scytheGlowMaterial = new THREE.MeshBasicMaterial({
+  color: 0x5fdcff,
+  transparent: true,
+  opacity: 0.5,
+  blending: THREE.AdditiveBlending,
+  side: THREE.BackSide,
+  depthWrite: false,
+});
+const gearMaterial = new THREE.MeshStandardMaterial({
+  color: 0xb8c0c8,
+  metalness: 0.92,
+  roughness: 0.3,
+});
+
+const armorMaterial = new THREE.MeshToonMaterial({ color: 0x5f636b, gradientMap: toonGradient });
+const darkMetalMaterial = new THREE.MeshToonMaterial({ color: 0x262b31, gradientMap: toonGradient });
 const axeSteelMaterial = new THREE.MeshToonMaterial({ color: 0xa7b2be, gradientMap: toonGradient });
 const axeRuneMaterial = new THREE.MeshStandardMaterial({
   color: 0x9ff6ff,
@@ -27,21 +67,31 @@ const axeRuneMaterial = new THREE.MeshStandardMaterial({
   emissiveIntensity: 1.2,
   roughness: 0.3,
 });
+const eyeMaterial = new THREE.MeshStandardMaterial({
+  color: 0xd8faff,
+  emissive: 0x36b8ff,
+  emissiveIntensity: 3.6,
+  roughness: 0.2,
+});
 
 const legGeometry = new THREE.CapsuleGeometry(0.3, 0.7, 4, 8);
 const shinGeometry = new THREE.CapsuleGeometry(0.27, 0.78, 4, 8);
-const bootGeometry = new THREE.BoxGeometry(0.66, 0.5, 1.05);
+const bootGeometry = new THREE.BoxGeometry(0.72, 0.56, 1.16);
 const armGeometry = new THREE.CapsuleGeometry(0.25, 0.55, 4, 8);
 const forearmGeometry = new THREE.CapsuleGeometry(0.23, 0.52, 4, 8);
 const handGeometry = new THREE.SphereGeometry(0.26, 8, 6);
 const chestGeometry = new THREE.BoxGeometry(1.7, 1.55, 0.98);
 const pelvisGeometry = new THREE.BoxGeometry(1.45, 0.66, 0.9);
 const headGeometry = new THREE.SphereGeometry(0.55, 14, 12);
-const shoulderGeometry = new THREE.SphereGeometry(0.46, 10, 8);
 const barGeometry = new THREE.PlaneGeometry(2.6, 0.28);
 const barFillGeometry = new THREE.PlaneGeometry(2.5, 0.18);
 const ringGeometry = new THREE.RingGeometry(1.7, 2.1, 44);
 const shadowGeometry = new THREE.PlaneGeometry(3.8, 2.5);
+const dreadGeometry = new THREE.CylinderGeometry(0.055, 0.12, 1.15, 5);
+const gearDiscGeometry = new THREE.CylinderGeometry(0.16, 0.16, 0.07, 10);
+const gearToothGeometry = new THREE.BoxGeometry(0.07, 0.08, 0.09);
+const chainLinkGeometry = new THREE.TorusGeometry(0.1, 0.028, 4, 8);
+const clothStripGeometry = new THREE.PlaneGeometry(0.3, 1.0);
 
 const shadowMaterial = new THREE.MeshBasicMaterial({
   map: makeGlowTexture(),
@@ -50,6 +100,23 @@ const shadowMaterial = new THREE.MeshBasicMaterial({
   opacity: 0.38,
   depthWrite: false,
 });
+
+const scytheGeometry = (() => {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.08);
+  shape.quadraticCurveTo(0.12, 0.86, 1.05, 1.34);
+  shape.quadraticCurveTo(0.62, 0.66, 0.45, 0.14);
+  shape.quadraticCurveTo(0.24, 0.02, 0, 0.08);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.1,
+    bevelEnabled: true,
+    bevelThickness: 0.02,
+    bevelSize: 0.02,
+    bevelSegments: 1,
+  });
+  geometry.center();
+  return geometry;
+})();
 
 export interface CharacterRig {
   group: THREE.Group;
@@ -69,10 +136,7 @@ export interface CharacterRig {
 function buildAxe(): THREE.Group {
   const axe = new THREE.Group();
 
-  const handle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.075, 0.1, 2.9, 7),
-    leatherMaterial
-  );
+  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.1, 2.9, 7), leatherMaterial);
   handle.castShadow = true;
   axe.add(handle);
 
@@ -80,8 +144,6 @@ function buildAxe(): THREE.Group {
   guard.position.y = 1.0;
   axe.add(guard);
 
-  // A broad, hand-shaped double bit. Extruding a 2D silhouette keeps the
-  // profile sharp instead of reading as a stack of boxes.
   const shape = new THREE.Shape();
   shape.moveTo(0, 0.62);
   shape.lineTo(0.42, 0.74);
@@ -138,11 +200,6 @@ function buildSword(): THREE.Group {
     emissive: 0xffc45e,
     emissiveIntensity: 1.2,
   });
-  const rune = new THREE.MeshStandardMaterial({
-    color: 0xa8fbff,
-    emissive: 0x4bd8ff,
-    emissiveIntensity: 2.0,
-  });
 
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.105, 1.05, 7), leatherMaterial);
   grip.position.y = 0.1;
@@ -169,18 +226,121 @@ function buildSword(): THREE.Group {
   sword.add(tip);
 
   for (const side of [-1, 1]) {
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 2.1, 0.115), rune);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.045, 2.1, 0.115), lightningMaterial);
     strip.position.set(side * 0.1, 2.25, 0);
     sword.add(strip);
   }
 
-  const crossRune = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.12), rune);
+  const crossRune = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.05, 0.12), lightningMaterial);
   crossRune.position.y = 0.92;
   sword.add(crossRune);
 
   sword.position.set(0.12, 0.25, 0.12);
   sword.rotation.z = 0.08;
   return sword;
+}
+
+function buildChainBlade(side: -1 | 1): THREE.Group {
+  const group = new THREE.Group();
+
+  const start = new THREE.Vector3(0, 0, 0);
+  const mid = new THREE.Vector3(side * 0.18, -0.75, 0.18);
+  const end = new THREE.Vector3(side * 0.38, -1.55, 0.42);
+
+  for (let i = 1; i <= 7; i++) {
+    const t = i / 8;
+    const a = start.clone().lerp(mid, t);
+    const b = mid.clone().lerp(end, t);
+    const point = a.lerp(b, t);
+    const link = new THREE.Mesh(chainLinkGeometry, chainMaterial);
+    link.position.copy(point);
+    link.rotation.set(
+      Math.PI / 2 + (i % 2 === 0 ? 0.5 : -0.5),
+      side * 0.3 + i * 0.22,
+      Math.PI / 2
+    );
+    link.scale.setScalar(0.9 + i * 0.03);
+    group.add(link);
+  }
+
+  const blade = new THREE.Mesh(scytheGeometry, bladeMaterial);
+  blade.position.copy(end).add(new THREE.Vector3(0, -0.25, 0.1));
+  blade.rotation.set(0.1, side * Math.PI * 0.5, side * -0.38);
+  blade.scale.setScalar(1.05);
+  blade.castShadow = true;
+  group.add(blade);
+
+  const glow = new THREE.Mesh(scytheGeometry, scytheGlowMaterial);
+  glow.position.copy(blade.position);
+  glow.rotation.copy(blade.rotation);
+  glow.scale.copy(blade.scale).multiplyScalar(1.08);
+  group.add(glow);
+
+  for (let i = 0; i < 3; i++) {
+    const spark = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.42, 0.035), lightningMaterial);
+    spark.position.set(
+      side * (0.45 + i * 0.13),
+      -1.58 + i * 0.14,
+      0.28
+    );
+    spark.rotation.z = side * (0.7 + i * 0.25);
+    group.add(spark);
+  }
+
+  const glowSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: makeGlowTexture(),
+      color: 0x3fc8ff,
+      transparent: true,
+      opacity: 0.32,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  glowSprite.scale.setScalar(1.1);
+  glowSprite.position.copy(end).add(new THREE.Vector3(0, -0.25, 0.1));
+  group.add(glowSprite);
+
+  return group;
+}
+
+function makeSpiral(radius = 0.3, turns = 2.1): THREE.Mesh {
+  const points: THREE.Vector3[] = [];
+  for (let i = 0; i <= 44; i++) {
+    const t = i / 44;
+    const angle = t * Math.PI * 2 * turns;
+    const r = 0.04 + t * radius;
+    points.push(new THREE.Vector3(Math.cos(angle) * r, Math.sin(angle) * r, 0));
+  }
+  const geometry = new THREE.TubeGeometry(
+    new THREE.CatmullRomCurve3(points),
+    44,
+    0.022,
+    4,
+    false
+  );
+  return new THREE.Mesh(geometry, darkSilverMaterial);
+}
+
+function makeGear(radiusScale = 1): THREE.Group {
+  const gear = new THREE.Group();
+  const disc = new THREE.Mesh(gearDiscGeometry, gearMaterial);
+  disc.rotation.z = Math.PI / 2;
+  disc.scale.setScalar(radiusScale);
+  gear.add(disc);
+
+  for (let i = 0; i < 8; i++) {
+    const tooth = new THREE.Mesh(gearToothGeometry, gearMaterial);
+    const angle = (i / 8) * Math.PI * 2;
+    tooth.position.set(0, Math.cos(angle) * 0.17 * radiusScale, Math.sin(angle) * 0.17 * radiusScale);
+    tooth.rotation.x = angle;
+    gear.add(tooth);
+  }
+
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.1, 6), lightningMaterial);
+  hub.rotation.z = Math.PI / 2;
+  gear.add(hub);
+  return gear;
 }
 
 export function createCharacter(options: {
@@ -214,12 +374,14 @@ export function createCharacter(options: {
     root.add(selfRing);
   }
 
+  const gears: THREE.Group[] = [];
+
   // ------------------------------------------------------------------- legs
   function makeLeg(side: -1 | 1) {
     const hip = new THREE.Group();
     hip.position.set(side * 0.48, 2.9, 0);
 
-    const thigh = new THREE.Mesh(legGeometry, leatherMaterial);
+    const thigh = new THREE.Mesh(legGeometry, pantsMaterial);
     thigh.position.y = -0.65;
     thigh.castShadow = true;
     hip.add(thigh);
@@ -237,8 +399,14 @@ export function createCharacter(options: {
     shin.castShadow = true;
     knee.add(shin);
 
+    for (let i = 0; i < 3; i++) {
+      const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 8), pantsMaterial);
+      wrap.position.y = -0.4 - i * 0.2;
+      knee.add(wrap);
+    }
+
     const boot = new THREE.Mesh(bootGeometry, darkMetalMaterial);
-    boot.position.set(0, -1.34, 0.12);
+    boot.position.set(0, -1.28, 0.14);
     boot.castShadow = true;
     knee.add(boot);
 
@@ -253,26 +421,45 @@ export function createCharacter(options: {
   torso.position.y = 2.9;
   root.add(torso);
 
-  const pelvis = new THREE.Mesh(pelvisGeometry, leatherMaterial);
+  const pelvis = new THREE.Mesh(pelvisGeometry, pantsMaterial);
   pelvis.position.y = 0.28;
   pelvis.castShadow = true;
   torso.add(pelvis);
 
-  // The fur kilt is the character's widest silhouette below the belt.
   const kilt = new THREE.Mesh(
     new THREE.CylinderGeometry(0.95, 1.15, 1.35, 10, 1, true),
-    furMaterial
+    blueClothMaterial
   );
   kilt.position.y = -0.12;
   kilt.castShadow = true;
   torso.add(kilt);
 
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.3, 1.08), leatherMaterial);
+  // Tattered storm-blue strips hanging from the belt.
+  for (let i = 0; i < 7; i++) {
+    const angle = (i / 7) * Math.PI * 2 + 0.2;
+    const strip = new THREE.Mesh(clothStripGeometry, blueClothMaterial);
+    strip.position.set(
+      Math.cos(angle) * 0.92,
+      0.05 - (i % 3) * 0.18,
+      Math.sin(angle) * 0.92
+    );
+    strip.rotation.y = -angle + Math.PI / 2;
+    strip.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.06;
+    strip.scale.y = 0.75 + (i % 4) * 0.16;
+    strip.castShadow = true;
+    torso.add(strip);
+  }
+
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.34, 1.1), leatherMaterial);
   belt.position.y = 0.56;
   belt.castShadow = true;
   torso.add(belt);
 
-  const chest = new THREE.Mesh(chestGeometry, skinMaterial);
+  const buckle = makeSpiral(0.15, 1.8);
+  buckle.position.set(0, 0.56, 0.58);
+  torso.add(buckle);
+
+  const chest = new THREE.Mesh(chestGeometry, leatherMaterial);
   chest.position.y = 1.28;
   chest.castShadow = true;
   torso.add(chest);
@@ -280,43 +467,56 @@ export function createCharacter(options: {
   chestOutline.scale.setScalar(1.035);
   chest.add(chestOutline);
 
-  // A single leather baldric across the chest.
-  const baldric = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.8, 0.1), leatherMaterial);
-  baldric.position.set(0.1, 1.3, 0.51);
-  baldric.rotation.z = -0.5;
-  torso.add(baldric);
+  // Dark leather chest plate and its straps.
+  const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(1.42, 1.15, 0.2), leatherMaterial);
+  chestPlate.position.set(0, 1.34, 0.56);
+  chestPlate.castShadow = true;
+  torso.add(chestPlate);
 
-  // Red war paint down the left side of the chest and back.
-  const chestTattoo = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1.25, 0.07), tattooMaterial);
-  chestTattoo.position.set(-0.36, 1.3, 0.5);
-  chestTattoo.rotation.z = 0.12;
-  torso.add(chestTattoo);
+  for (const side of [-1, 1]) {
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.65, 0.11), leatherMaterial);
+    strap.position.set(side * 0.28, 1.3, 0.68);
+    strap.rotation.z = side * 0.26;
+    torso.add(strap);
 
-  const backTattoo = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1.35, 0.07), tattooMaterial);
-  backTattoo.position.set(-0.28, 1.28, -0.5);
-  torso.add(backTattoo);
+    const bucklePlate = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.06), darkSilverMaterial);
+    bucklePlate.position.set(side * 0.28, 1.55, 0.76);
+    torso.add(bucklePlate);
+  }
 
-  // Left pauldron + fur mantle.
-  const pauldron = new THREE.Mesh(shoulderGeometry, armorMaterial);
-  pauldron.position.set(-0.98, 1.78, 0);
-  pauldron.scale.set(1.25, 1.1, 1.2);
-  pauldron.castShadow = true;
-  torso.add(pauldron);
+  // Silver pauldrons with raised storm spirals, front and back.
+  for (const side of [-1, 1]) {
+    const pauldron = new THREE.Group();
+    pauldron.position.set(side * 1.0, 1.8, 0);
 
-  const mantle = new THREE.Mesh(
-    new THREE.DodecahedronGeometry(0.72, 0),
-    furMaterial
-  );
-  mantle.position.set(-0.7, 1.95, -0.25);
-  mantle.scale.set(1.6, 0.55, 1.1);
-  mantle.rotation.z = 0.2;
-  torso.add(mantle);
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(0.62, 12, 9, 0, Math.PI * 2, 0, Math.PI * 0.62),
+      silverMaterial
+    );
+    shell.scale.set(1.25, 0.95, 1.15);
+    shell.castShadow = true;
+    pauldron.add(shell);
+
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.055, 5, 18), darkSilverMaterial);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = -0.02;
+    pauldron.add(rim);
+
+    for (const zSide of [-1, 1]) {
+      const spiral = makeSpiral(0.28, 2.0);
+      spiral.position.set(side * 0.08, 0.14, zSide * 0.46);
+      spiral.rotation.y = zSide < 0 ? Math.PI : 0;
+      pauldron.add(spiral);
+    }
+
+    torso.add(pauldron);
+  }
 
   // ------------------------------------------------------------------- arms
   function makeArm(side: -1 | 1) {
     const pivot = new THREE.Group();
     pivot.position.set(side * 1.0, 1.62, 0);
-    pivot.rotation.z = side * 0.12;
+    pivot.rotation.z = side * 0.14;
     torso.add(pivot);
 
     const upper = new THREE.Mesh(armGeometry, skinMaterial);
@@ -336,6 +536,30 @@ export function createCharacter(options: {
     bracer.castShadow = true;
     elbow.add(bracer);
 
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.46, 0.18), silverMaterial);
+    plate.position.set(side * 0.1, -0.45, 0.18);
+    elbow.add(plate);
+
+    // Mechanical gears on the outside of the bracer.
+    for (let i = 0; i < 2; i++) {
+      const gear = makeGear(i === 0 ? 1 : 0.7);
+      gear.position.set(side * 0.29, -0.4 - i * 0.26, 0);
+      elbow.add(gear);
+      gears.push(gear);
+    }
+
+    // Crackling blue veins on the forearm.
+    for (let i = 0; i < 4; i++) {
+      const vein = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.38, 0.03), lightningMaterial);
+      vein.position.set(
+        side * (0.12 + (i % 2) * 0.11),
+        -0.25 - i * 0.15,
+        0.25
+      );
+      vein.rotation.z = side * (0.15 + i * 0.1);
+      elbow.add(vein);
+    }
+
     const hand = new THREE.Group();
     hand.position.y = -1.0;
     elbow.add(hand);
@@ -348,23 +572,6 @@ export function createCharacter(options: {
   }
   const leftArm = makeArm(-1);
   const rightArm = makeArm(1);
-
-  // Shield strapped to the left forearm.
-  const shield = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.72, 0.72, 0.14, 16),
-    armorMaterial
-  );
-  shield.rotation.z = Math.PI / 2;
-  shield.position.set(-0.28, -0.55, 0);
-  shield.castShadow = true;
-  leftArm.elbow.add(shield);
-
-  const shieldBoss = new THREE.Mesh(
-    new THREE.SphereGeometry(0.24, 8, 6),
-    armorMaterial
-  );
-  shieldBoss.position.set(-0.4, -0.55, 0);
-  leftArm.elbow.add(shieldBoss);
 
   // ------------------------------------------------------------------ head
   const head = new THREE.Group();
@@ -383,43 +590,53 @@ export function createCharacter(options: {
   skullOutline.scale.setScalar(1.08);
   skull.add(skullOutline);
 
-  // Heavy brow.
   const brow = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.14, 0.24), skinMaterial);
   brow.position.set(0, 0.26, 0.42);
   head.add(brow);
 
-  // Kratos' beard: a broad wedge under the jaw.
-  const beard = new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.0, 6), beardMaterial);
-  beard.position.set(0, -0.28, 0.2);
-  beard.rotation.x = Math.PI;
-  beard.castShadow = true;
-  head.add(beard);
+  const nose = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.2, 0.16), skinMaterial);
+  nose.position.set(0, 0.06, 0.55);
+  head.add(nose);
 
-  const moustache = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.18, 0.22), beardMaterial);
-  moustache.position.set(0, -0.05, 0.45);
-  head.add(moustache);
+  // Dreadlocks, gathered and tied at the back of the skull.
+  for (let i = 0; i < 9; i++) {
+    const angle = (i / 9) * Math.PI * 1.5 - Math.PI * 0.25;
+    const dread = new THREE.Mesh(dreadGeometry, dreadMaterial);
+    dread.position.set(
+      Math.cos(angle) * 0.38,
+      0.42 - (i % 3) * 0.09,
+      -0.18 + Math.sin(angle) * 0.18
+    );
+    dread.rotation.set(-0.55 - (i % 3) * 0.12, 0, angle * 0.25);
+    dread.castShadow = false;
+    head.add(dread);
+  }
 
-  // The red stripe over the left eye and skull.
-  const faceStripe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.05, 0.08), tattooMaterial);
-  faceStripe.position.set(-0.18, 0.22, 0.53);
-  faceStripe.rotation.z = 0.48;
-  head.add(faceStripe);
+  const hairTie = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.05, 5, 10), leatherMaterial);
+  hairTie.position.set(0, 0.18, -0.45);
+  hairTie.rotation.x = Math.PI / 2;
+  head.add(hairTie);
 
-  const scalpStripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.08), tattooMaterial);
-  scalpStripe.position.set(-0.05, 0.55, 0.36);
-  scalpStripe.rotation.z = 0.35;
-  head.add(scalpStripe);
-
-  // Eyes, with a faint storm-blue glint.
-  const eyeMaterial = new THREE.MeshStandardMaterial({
-    color: 0x9fe7ff,
-    emissive: 0x3fb7d6,
-    emissiveIntensity: 1.6,
-  });
+  // Bright blue eyes and their glow.
+  const eyeGlowTexture = makeGlowTexture();
   for (const side of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 6), eyeMaterial);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.065, 7, 6), eyeMaterial);
     eye.position.set(side * 0.2, 0.14, 0.52);
     head.add(eye);
+
+    const glow = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: eyeGlowTexture,
+        color: 0x56ccff,
+        transparent: true,
+        opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    glow.scale.setScalar(0.28);
+    glow.position.set(side * 0.2, 0.14, 0.57);
+    head.add(glow);
   }
 
   // ------------------------------------------------------------------ weapons
@@ -427,11 +644,17 @@ export function createCharacter(options: {
   axe.scale.setScalar(1.25);
   axe.position.set(0.15, -0.15, 0.15);
   axe.rotation.z = 0.28;
+  axe.visible = false;
   rightArm.hand.add(axe);
 
   const sword = buildSword();
   sword.visible = false;
   rightArm.hand.add(sword);
+
+  const chainRight = buildChainBlade(1);
+  const chainLeft = buildChainBlade(-1);
+  rightArm.hand.add(chainRight);
+  leftArm.hand.add(chainLeft);
 
   // -------------------------------------------------- floating status for others
   let healthFill: THREE.Mesh | null = null;
@@ -480,6 +703,7 @@ export function createCharacter(options: {
     yaw: Math.random() * Math.PI * 2,
     attackTimer: 0,
     attackDuration: 0.48,
+    weapon: 2,
   };
 
   const fillColor = new THREE.Color();
@@ -493,8 +717,11 @@ export function createCharacter(options: {
       }
     },
     setWeapon(weapon) {
-      axe.visible = weapon !== 1;
+      state.weapon = weapon;
+      axe.visible = weapon === 0;
       sword.visible = weapon === 1;
+      chainLeft.visible = weapon === 2;
+      chainRight.visible = weapon === 2;
     },
     update(dt, elapsed, vx, vy, health, camera, raging) {
       const speed = Math.min(1, Math.hypot(vx, vy) / PLAYER_SPEED);
@@ -526,9 +753,9 @@ export function createCharacter(options: {
         ? Math.sin(attackProgress * Math.PI) * 2.2
         : 0;
 
-      leftArm.pivot.rotation.x = -swing * 0.7;
+      leftArm.pivot.rotation.x = -swing * 0.7 + (state.weapon === 2 ? attackSwing : 0);
       rightArm.pivot.rotation.x = swing * 0.7 - attackSwing;
-      rightArm.pivot.rotation.z = 0.12 - attackSwing * 0.4;
+      rightArm.pivot.rotation.z = 0.14 - attackSwing * 0.4;
       leftArm.elbow.rotation.x = 0.25 + Math.max(0, -swing) * 0.3;
       rightArm.elbow.rotation.x = 0.25 + Math.max(0, swing) * 0.3 + attackSwing * 0.4;
 
@@ -539,6 +766,11 @@ export function createCharacter(options: {
 
       const idle = 1 + Math.sin(elapsed * 1.9 + state.phase * 0.02) * 0.012 * (1 - speed);
       chest.scale.y = idle;
+
+      for (let i = 0; i < gears.length; i++) {
+        gears[i].rotation.x += dt * (i % 2 === 0 ? 1.8 : -2.4);
+      }
+      lightningMaterial.emissiveIntensity = 2.1 + Math.sin(elapsed * 11) * 0.8;
 
       if (selfRing) {
         selfRing.rotation.z += dt * 0.6;

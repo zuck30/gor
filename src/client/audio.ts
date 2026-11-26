@@ -67,9 +67,9 @@ export const VOICE_LINES = {
     volume: 0.9,
   },
   rage: {
-    file: "storm-rage.mp3",
+    file: "rage.mp3",
     text: "Rage.",
-    volume: 0.95,
+    volume: 1.0,
   },
   revive: {
     file: "storm-revive.mp3",
@@ -129,6 +129,9 @@ export const VOICE_LINES = {
 } as const;
 
 export type VoiceKey = keyof typeof VOICE_LINES;
+
+/** Bump when a take is replaced so the browser does not serve a cached mp3. */
+const AUDIO_VERSION = "2";
 
 export const SFX = {
   sword: { file: "sword-sound.mp3", volume: 0.55, voices: 2 },
@@ -206,7 +209,7 @@ export class VoicePlayer {
       const elements: HTMLAudioElement[] = [];
       const created = { elements, cursor: 0, missing: false };
       for (let i = 0; i < definition.voices; i++) {
-        const audio = new Audio(`/voices/${definition.file}`);
+        const audio = new Audio(`/voices/${definition.file}?v=${AUDIO_VERSION}`);
         audio.preload = "auto";
         audio.addEventListener("error", () => { created.missing = true; }, { once: true });
         elements.push(audio);
@@ -238,7 +241,7 @@ export class VoicePlayer {
     let audio = this.elements.get(key);
     if (!audio) {
       const line = VOICE_LINES[key];
-      audio = new Audio(`/voices/${line.file}`);
+      audio = new Audio(`/voices/${line.file}?v=${AUDIO_VERSION}`);
       audio.preload = "auto";
       audio.addEventListener("error", () => this.missing.add(key), { once: true });
       this.elements.set(key, audio);

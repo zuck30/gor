@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0b0f0d" />
-    <meta name="description" content="The God of Rage. A mythic browser action game. Hunt the creatures and gods of a storm-wracked island." />
+    <meta name="description" content="Mwanafyale, the God of Rage. A mythic browser action game. Hunt the creatures and gods of a storm-wracked island." />
     <link rel="icon" href="data:," />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -220,6 +220,16 @@
         align-items: flex-start;
         gap: 8px;
       }
+      .hero-name {
+        padding-left: 3px;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--gold);
+        text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8);
+      }
       .health {
         display: flex;
         align-items: center;
@@ -385,6 +395,15 @@
         transition: opacity 0.6s ease;
       }
       #death-screen.is-visible { opacity: 1; }
+      .death-hero {
+        margin: 0 0 -6px;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
       .death-title {
         margin: 0;
         font-family: "GodOfWar", "Cinzel Decorative", "Cinzel", Georgia, serif;
@@ -839,7 +858,7 @@
     <header class="hud">
       <div class="brand">
         <h1>The God of Rage</h1>
-        <p>gods fall. the storm remains.</p>
+        <p>Mwanafyale. gods fall. the storm remains.</p>
       </div>
       <div class="hud-right">
         <div class="minimap">
@@ -865,6 +884,7 @@
     </div>
 
     <div id="death-screen">
+      <p class="death-hero">Mwanafyale</p>
       <p class="death-title">You died</p>
       <p class="death-sub">The storm will return you in <span id="respawn-value">6</span></p>
       <p class="death-kills"><span id="death-kills">0</span> slain</p>
@@ -873,6 +893,7 @@
 
     <div class="footer-hud">
       <div class="vitals">
+        <div class="hero-name">Mwanafyale</div>
         <div class="health">
           <span>hp</span>
           <span class="health-track"><i id="health-fill"></i></span>
@@ -885,7 +906,7 @@
           <kbd>Q</kbd>
         </div>
         <div class="weapon">
-          <span id="weapon-name">axe of the storm</span>
+          <span id="weapon-name">chain blades</span>
           <kbd>E</kbd>
         </div>
         <div class="chips">
@@ -918,7 +939,7 @@
           <p class="brief-kicker">the hunt</p>
           <h2>Survive the storm. Slay the gods.</h2>
           <p class="brief-lead">
-            The ring is the clock. Clear each wave. Every fifth wave, a colossus rises.
+            You are Mwanafyale, the God of Rage. The ring is the clock. Clear each wave. Every fifth wave, a colossus rises.
           </p>
         </header>
         <div class="brief-grid">
@@ -931,8 +952,9 @@
             </ol>
           </section>
           <section class="brief-card">
-            <h3>The axe</h3>
-            <p>Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Swing with <kbd>LMB</kbd> or <kbd>Space</kbd>. The cleave hits every foe around you.</p>
+            <h3>The weapons</h3>
+            <p>Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Swing with <kbd>LMB</kbd> or <kbd>Space</kbd>. Press <kbd>E</kbd> to cycle weapons.</p>
+            <p><b>Chain Blades</b> have long reach and cut every foe nearby. The <b>Axe</b> is a heavy cleave. The <b>Sword of God</b> is fast, focused, and heals on hit.</p>
             <p>Hits and kills fill <b>rage</b>. At full, press <kbd>Q</kbd> to double your damage for eight seconds.</p>
           </section>
           <section class="brief-card">
@@ -967,7 +989,7 @@
     <div id="loading">
       <div class="loading-inner">
         <p class="loading-mark">The God of Rage</p>
-        <p class="loading-sub">gods fall. the storm remains.</p>
+        <p class="loading-sub">Mwanafyale. gods fall. the storm remains.</p>
         <div class="loading-bar"><i></i></div>
       </div>
     </div>
