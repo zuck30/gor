@@ -17,7 +17,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 appEl.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -225,7 +225,7 @@ async function main() {
   camera.position.set(startX, 17, startZ + 24);
   camera.lookAt(startX, 1.5, startZ);
 
-  const clock = new THREE.Clock();
+  let lastTime = performance.now();
   const cameraTarget = new THREE.Vector3();
   const desiredCamera = new THREE.Vector3();
 
@@ -247,7 +247,8 @@ async function main() {
       mesh.position.z = toWorldZ(predict.value(player, "y"));
     }
 
-    const dt = Math.min(clock.getDelta(), 0.1);
+    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
     const px = toWorldX(predict.value(self, "x"));
     const pz = toWorldZ(predict.value(self, "y"));
 
