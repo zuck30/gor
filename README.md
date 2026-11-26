@@ -14,6 +14,8 @@ Open `http://localhost:5173`.
 
 **Controls**
 
+<div align="center">
+
 | Action | Input |
 |---|---|
 | Move | `W` `A` `S` `D` |
@@ -22,6 +24,8 @@ Open `http://localhost:5173`.
 | Rage | `Q` |
 | Pause | `P` |
 | Rules | `H` |
+
+</div>
 
 Three chain-blade swings in a row hurl both blades at the nearest enemy.
 
