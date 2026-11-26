@@ -25,11 +25,6 @@ Open `http://localhost:5173`.
 
 Three chain-blade swings in a row hurl both blades at the nearest enemy.
 
-**Deploy**
-
-Client: Vercel, using `vercel.json`.
-Server: Render, using `render.yaml` and `server-production.mjs`.
-
 **License**
 
 MIT
