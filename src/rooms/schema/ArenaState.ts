@@ -75,6 +75,17 @@ export const PLAYER_RAGE = {
   duration: 8,
 };
 
+/** Three chain-blade swings in a row hurl both blades on their chains. */
+export const CHAIN_COMBO = {
+  window: 1.8,
+  range: 220,
+  damage: 240,
+  splashRadius: 34,
+  splashDamage: 80,
+  cooldown: 1.15,
+  knockback: 34,
+} as const;
+
 export const RESPAWN_SECONDS = 6;
 
 export const MoveInput = schema({
@@ -99,8 +110,14 @@ export const Player = schema({
   /** False once health hits zero; dead players respawn at the storm's eye. */
   alive: t.boolean(),
   kills: t.uint16(),
-  /** 0 = Axe of the Storm, 1 = Sword of God. */
+  /** 0 = Axe of the Storm, 1 = Sword of God, 2 = Chain Blades. */
   weapon: t.uint8(),
+  /** Chain-blade combo progress, 0..2. The next swing throws the blades. */
+  comboStep: t.uint8(),
+  /** Increments whenever the chain-blades are thrown. */
+  throwSeq: t.uint16(),
+  throwX: t.number(),
+  throwY: t.number(),
   /** 0..100, fills as the axe bites. */
   rage: t.number(),
   raging: t.boolean(),
@@ -135,6 +152,8 @@ export const ArenaState = schema({
 
   /** False until a player opens the hunt. The storm and waves hold. */
   started: t.boolean(),
+  /** The arena is paused for everyone in the room. */
+  paused: t.boolean(),
   /** Wave of the hunt. Wave 5 and every fifth after it spawns a colossus. */
   wave: t.uint8(),
   /** Seconds until the next wave when the field is clear. */

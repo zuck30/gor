@@ -317,6 +317,86 @@
         backdrop-filter: blur(8px);
       }
       .weapon kbd { margin-left: auto; }
+      .combo-pips {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .combo-pips i {
+        display: block;
+        width: 7px;
+        height: 7px;
+        transform: rotate(45deg);
+        border: 1px solid rgba(214, 184, 74, 0.35);
+        transition: background 0.15s, box-shadow 0.15s, border-color 0.15s;
+      }
+      .combo-pips i.is-lit {
+        background: var(--gold);
+        border-color: var(--gold);
+        box-shadow: 0 0 7px rgba(214, 184, 74, 0.6);
+      }
+      .combo-pips.is-ready i {
+        border-color: rgba(90, 210, 255, 0.8);
+      }
+      .combo-pips.is-ready i.is-lit {
+        background: #65dcff;
+        border-color: #65dcff;
+        box-shadow: 0 0 10px rgba(90, 210, 255, 0.85);
+      }
+      .combo-pips.is-hidden { display: none; }
+
+      #pause-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 45;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: radial-gradient(circle at 50% 45%, rgba(20, 26, 34, 0.55), rgba(4, 5, 5, 0.9) 72%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      #pause-screen.is-visible { opacity: 1; pointer-events: auto; }
+      .pause-panel {
+        width: min(440px, 92vw);
+        padding: clamp(24px, 4vw, 40px);
+        text-align: center;
+        background: linear-gradient(150deg, rgba(30, 25, 22, 0.98), rgba(9, 10, 9, 0.99));
+        border: 1px solid rgba(214, 184, 74, 0.55);
+        outline: 1px solid rgba(214, 184, 74, 0.15);
+        outline-offset: 4px;
+        box-shadow: 0 30px 90px rgba(0, 0, 0, 0.75);
+      }
+      .pause-kicker {
+        margin: 0 0 6px;
+        font-size: 10px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .pause-panel h2 {
+        margin: 0;
+        font-family: "GodOfWar", "Cinzel", Georgia, serif;
+        font-size: clamp(38px, 7vw, 64px);
+        font-weight: 400;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #f2e7ce;
+      }
+      .pause-sub {
+        margin: 10px 0 20px;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 16px;
+        color: #b8ab94;
+      }
+      .pause-hint {
+        margin: 10px 0 0;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: #8d816e;
+      }
+      .pause-hint kbd { font-size: 9px; }
 
       #wave-banner {
         position: fixed;
@@ -566,6 +646,32 @@
       #sound-toggle.is-muted { color: #7f7668; border-color: rgba(214, 184, 74, 0.22); }
       #sound-toggle.is-muted .icon-on { display: none; }
       #sound-toggle.is-muted .icon-off { display: block; }
+
+      #pause-toggle {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: grid;
+        place-items: center;
+        color: var(--gold);
+        background: var(--panel);
+        border: 1px solid rgba(214, 184, 74, 0.5);
+        border-radius: 999px;
+        backdrop-filter: blur(8px);
+        cursor: pointer;
+        pointer-events: auto;
+        transition: color 0.2s, border-color 0.2s;
+      }
+      #pause-toggle:hover,
+      #pause-toggle:focus-visible {
+        color: var(--text);
+        border-color: rgba(214, 184, 74, 0.8);
+        outline: none;
+      }
+      #pause-toggle svg { width: 17px; height: 17px; display: block; }
+      #pause-toggle .icon-play { display: none; }
+      #pause-toggle.is-paused .icon-pause { display: none; }
+      #pause-toggle.is-paused .icon-play { display: block; }
 
       #voice-line {
         position: fixed;
@@ -907,12 +1013,22 @@
         </div>
         <div class="weapon">
           <span id="weapon-name">chain blades</span>
+          <span class="combo-pips" id="combo-pips" title="Chain combo"><i></i><i></i><i></i></span>
           <kbd>E</kbd>
         </div>
         <div class="chips">
           <span id="status">connecting…</span>
           <span id="storm-status">the storm gathers</span>
           <button id="help-toggle" type="button">rules</button>
+          <button id="pause-toggle" class="icon-button" type="button" aria-label="Pause" title="Pause">
+            <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="6" y="5" width="4.5" height="14" rx="1" fill="currentColor"/>
+              <rect x="13.5" y="5" width="4.5" height="14" rx="1" fill="currentColor"/>
+            </svg>
+            <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 5l11 7-11 7z" fill="currentColor"/>
+            </svg>
+          </button>
           <button id="sound-toggle" class="icon-button" type="button" aria-label="Sound on" title="Sound on">
             <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>
@@ -929,7 +1045,8 @@
       <div class="controls">
         <strong>move</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><br />
         <strong>axe</strong> <kbd>LMB</kbd> / <kbd>Space</kbd><br />
-        <strong>rage</strong> <kbd>Q</kbd> <strong>rules</strong> <kbd>H</kbd>
+        <strong>rage</strong> <kbd>Q</kbd> <strong>pause</strong> <kbd>P</kbd><br />
+        <strong>rules</strong> <kbd>H</kbd>
       </div>
     </div>
 
@@ -955,6 +1072,7 @@
             <h3>The weapons</h3>
             <p>Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Swing with <kbd>LMB</kbd> or <kbd>Space</kbd>. Press <kbd>E</kbd> to cycle weapons.</p>
             <p><b>Chain Blades</b> have long reach and cut every foe nearby. The <b>Axe</b> is a heavy cleave. The <b>Sword of God</b> is fast, focused, and heals on hit.</p>
+            <p><b>Chain combo:</b> swing three times in a row. The third swing hurls both blades at the nearest foe for massive damage, then snaps them back to your hands.</p>
             <p>Hits and kills fill <b>rage</b>. At full, press <kbd>Q</kbd> to double your damage for eight seconds.</p>
           </section>
           <section class="brief-card">
@@ -983,6 +1101,16 @@
           <button id="brief-action" class="brief-button" type="button">Begin the hunt</button>
           <p class="brief-hint">Press <kbd>Enter</kbd> to begin. Press <kbd>H</kbd> any time for this brief.</p>
         </div>
+      </div>
+    </div>
+
+    <div id="pause-screen">
+      <div class="pause-panel">
+        <p class="pause-kicker">the hunt is paused</p>
+        <h2>Paused</h2>
+        <p class="pause-sub">The storm waits. Take a breath.</p>
+        <button id="pause-resume" class="brief-button" type="button">Resume</button>
+        <p class="pause-hint">press <kbd>P</kbd> to resume</p>
       </div>
     </div>
 

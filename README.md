@@ -26,6 +26,8 @@ to bring an ally into the same hunt.
 | Move | `W` `A` `S` `D` or arrow keys |
 | Axe | Left mouse / `Space` |
 | Rage | `Q` (when the rage meter is full) |
+| Pause | `P` |
+| Swap weapon | `E` |
 
 The storm still shrinks. Outside the ring it eats your health. Dying returns you
 at the storm's eye after a short count.
@@ -36,7 +38,10 @@ at the storm's eye after a short count.
   walk/attack animation set built entirely from procedural geometry.
 - Server-authoritative wave combat: draugr packs, trolls, gods and a colossus
   boss every fifth wave.
-- Rage meter: every axe hit fills it, `Q` doubles your damage for eight seconds.
+- Chain combo: three chain-blade swings in a row hurl both blades at the
+  nearest foe for heavy damage, then snap them back.
+- Rage meter: every hit fills it, `Q` doubles your damage for eight seconds.
+- Room-wide pause button and `P` shortcut.
 - Death and respawn, boss health bar, kill counter, wave banners, melee hit
   sparks, camera shake and screen burn.
 - A hand-built island: ruined colonnade, braziers, banners, a floating storm

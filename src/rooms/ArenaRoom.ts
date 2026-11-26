@@ -9,6 +9,7 @@ import {
   PLAYER_ATTACK,
   PLAYER_RAGE,
   WEAPONS,
+  CHAIN_COMBO,
   RESPAWN_SECONDS,
   type EnemyKind,
 } from "./schema/ArenaState.js";
@@ -75,6 +76,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private rageTimer = new Map<string, number>();
   private invulnerable = new Map<string, number>();
   private enemyCooldown = new Map<string, number>();
+  private comboTimer = new Map<string, number>();
 
   messages = {
     // movement arrives through the input buffer above - register handlers here
@@ -105,6 +107,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.state.stormDps = STORM_PHASES[0].dps;
 
     this.state.started = false;
+    this.state.paused = false;
     this.state.wave = 0;
     this.state.waveTimer = 3;
 
@@ -113,6 +116,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       this.started = true;
       this.state.started = true;
       this.state.waveTimer = 2.5;
+    });
+
+    this.onMessage("togglePause", () => {
+      if (!this.started) { return; }
+      this.state.paused = !this.state.paused;
     });
 
     if (process.env.NODE_ENV !== "production") {
@@ -153,6 +161,10 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       alive: true,
       kills: 0,
       weapon: 2,
+      comboStep: 0,
+      throwSeq: 0,
+      throwX: 0,
+      throwY: 0,
       rage: 0,
       raging: false,
       respawnTimer: 0,
@@ -168,6 +180,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.attackCooldown.delete(client.sessionId);
     this.rageTimer.delete(client.sessionId);
     this.invulnerable.delete(client.sessionId);
+    this.comboTimer.delete(client.sessionId);
   }
 
   onDispose() {
@@ -272,8 +285,10 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     player.vy = 0;
     player.raging = false;
     player.rage = 0;
+    player.comboStep = 0;
     player.respawnTimer = RESPAWN_SECONDS;
     this.rageTimer.delete(sessionId);
+    this.comboTimer.delete(sessionId);
     this.invulnerable.set(sessionId, 1.5);
   }
 
@@ -295,6 +310,102 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     player.vy = 0;
     this.invulnerable.set(sessionId, 2.5);
     this.attackCooldown.set(sessionId, 0);
+    player.comboStep = 0;
+    this.comboTimer.set(sessionId, 0);
+  }
+
+  private handleAttack(sessionId: string, player: Player) {
+    if (player.weapon !== 2) {
+      this.swingWeapon(sessionId, player);
+      player.comboStep = 0;
+      this.comboTimer.set(sessionId, 0);
+      return;
+    }
+
+    if ((this.comboTimer.get(sessionId) ?? 0) <= 0) {
+      player.comboStep = 0;
+    }
+
+    if (player.comboStep >= 2) {
+      if (this.throwChainBlades(sessionId, player)) {
+        player.comboStep = 0;
+        this.comboTimer.set(sessionId, 0);
+        return;
+      }
+      // No target in chain range. Fall through to a normal swing and keep the
+      // finisher armed so the next press can throw when a foe is close enough.
+    }
+
+    this.swingWeapon(sessionId, player);
+    player.comboStep = Math.min(2, player.comboStep + 1);
+    this.comboTimer.set(sessionId, CHAIN_COMBO.window);
+  }
+
+  private throwChainBlades(sessionId: string, player: Player): boolean {
+    let target: Enemy | null = null;
+    let bestDistance: number = CHAIN_COMBO.range;
+
+    for (const [, enemy] of this.state.enemies) {
+      if (!enemy.alive) { continue; }
+      const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        target = enemy;
+      }
+    }
+
+    if (!target) {
+      return false;
+    }
+
+    const multiplier = player.raging ? PLAYER_ATTACK.rageDamage : 1;
+    const impactX = target.x;
+    const impactY = target.y;
+    const kind = ENEMY_KINDS[target.kind] ?? "draugr";
+    const stats = ENEMY_STATS[kind];
+
+    target.health = Math.max(0, target.health - CHAIN_COMBO.damage * multiplier);
+    target.hitFlash = 1;
+
+    const dx = target.x - player.x;
+    const dy = target.y - player.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    target.x = clamp(target.x + (dx / distance) * CHAIN_COMBO.knockback, 12, ARENA_WIDTH - 12);
+    target.y = clamp(target.y + (dy / distance) * CHAIN_COMBO.knockback, 12, ARENA_HEIGHT - 12);
+
+    if (target.health <= 0) {
+      target.alive = false;
+      target.vx = 0;
+      target.vy = 0;
+      player.kills = Math.min(65535, player.kills + 1);
+      player.rage = Math.min(PLAYER_RAGE.max, player.rage + stats.rage);
+    } else {
+      player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
+    }
+
+    // The returning blades lash everything around the impact point.
+    for (const [, enemy] of this.state.enemies) {
+      if (!enemy.alive || enemy === target) { continue; }
+      if (Math.hypot(enemy.x - impactX, enemy.y - impactY) > CHAIN_COMBO.splashRadius) {
+        continue;
+      }
+      enemy.health = Math.max(0, enemy.health - CHAIN_COMBO.splashDamage * multiplier);
+      enemy.hitFlash = 1;
+      if (enemy.health <= 0) {
+        const splashKind = ENEMY_KINDS[enemy.kind] ?? "draugr";
+        enemy.alive = false;
+        enemy.vx = 0;
+        enemy.vy = 0;
+        player.kills = Math.min(65535, player.kills + 1);
+        player.rage = Math.min(PLAYER_RAGE.max, player.rage + ENEMY_STATS[splashKind].rage);
+      }
+    }
+
+    player.throwSeq = (player.throwSeq + 1) % 65536;
+    player.throwX = impactX;
+    player.throwY = impactY;
+    this.attackCooldown.set(sessionId, CHAIN_COMBO.cooldown);
+    return true;
   }
 
   private swingWeapon(sessionId: string, player: Player) {
@@ -545,6 +656,10 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private step(ctx: StepContext) {
     const dt = ctx.dt;
 
+    if (this.state.paused) {
+      return;
+    }
+
     // The briefing holds the hunt. Movement still works so a client can walk
     // around the drop zone; the storm, waves and enemies wait for "ready".
     if (!this.started) {
@@ -590,6 +705,12 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
         Math.max(0, (this.attackCooldown.get(sessionId) ?? 0) - dt)
       );
 
+      const comboTimer = Math.max(0, (this.comboTimer.get(sessionId) ?? 0) - dt);
+      this.comboTimer.set(sessionId, comboTimer);
+      if (comboTimer <= 0 && player.comboStep > 0) {
+        player.comboStep = 0;
+      }
+
       if (player.raging) {
         const remaining = Math.max(0, (this.rageTimer.get(sessionId) ?? 0) - dt);
         this.rageTimer.set(sessionId, remaining);
@@ -605,13 +726,15 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
           if (input.switchWeapon) {
             player.weapon = (player.weapon + 1) % 3;
+            player.comboStep = 0;
+            this.comboTimer.set(sessionId, 0);
             this.attackCooldown.set(sessionId, Math.max(0.2, this.attackCooldown.get(sessionId) ?? 0));
           }
           if (input.special) {
             this.tryRage(sessionId, player);
           }
           if (input.attack && (this.attackCooldown.get(sessionId) ?? 0) <= 0) {
-            this.swingWeapon(sessionId, player);
+            this.handleAttack(sessionId, player);
           }
         }
       }

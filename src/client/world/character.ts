@@ -122,6 +122,7 @@ export interface CharacterRig {
   group: THREE.Group;
   attack(duration?: number): void;
   setWeapon(weapon: number): void;
+  throwChain(): void;
   update(
     dt: number,
     elapsed: number,
@@ -704,6 +705,7 @@ export function createCharacter(options: {
     attackTimer: 0,
     attackDuration: 0.48,
     weapon: 2,
+    throwTimer: 0,
   };
 
   const fillColor = new THREE.Color();
@@ -722,6 +724,9 @@ export function createCharacter(options: {
       sword.visible = weapon === 1;
       chainLeft.visible = weapon === 2;
       chainRight.visible = weapon === 2;
+    },
+    throwChain() {
+      state.throwTimer = 0.62;
     },
     update(dt, elapsed, vx, vy, health, camera, raging) {
       const speed = Math.min(1, Math.hypot(vx, vy) / PLAYER_SPEED);
@@ -758,6 +763,19 @@ export function createCharacter(options: {
       rightArm.pivot.rotation.z = 0.14 - attackSwing * 0.4;
       leftArm.elbow.rotation.x = 0.25 + Math.max(0, -swing) * 0.3;
       rightArm.elbow.rotation.x = 0.25 + Math.max(0, swing) * 0.3 + attackSwing * 0.4;
+
+      state.throwTimer = Math.max(0, state.throwTimer - dt);
+      const throwing = state.throwTimer > 0;
+      if (state.weapon === 2) {
+        chainLeft.visible = !throwing;
+        chainRight.visible = !throwing;
+      }
+      if (throwing) {
+        leftArm.pivot.rotation.x = -1.15;
+        rightArm.pivot.rotation.x = -1.15;
+        leftArm.pivot.rotation.z = -0.28;
+        rightArm.pivot.rotation.z = 0.28;
+      }
 
       torso.rotation.x = 0.04 + speed * 0.14;
       torso.rotation.y = Math.sin(state.phase) * 0.07 * speed + attackSwing * 0.2;

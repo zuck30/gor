@@ -36,7 +36,7 @@ const rageValue = document.getElementById("rage-value")!;
 const rageRow = rageFill.closest(".rage") as HTMLElement;
 const stormStatusEl = document.getElementById("storm-status")!;
 const warningEl = document.getElementById("warning")!;
-const loadingEl = document.getElementById("loading")!;
+const loadingEl = document.getElementById("loading") as HTMLElement | null;
 const minimap = document.getElementById("minimap") as HTMLCanvasElement;
 const minimapCtx = minimap.getContext("2d")!;
 const waveBanner = document.getElementById("wave-banner")!;
@@ -58,6 +58,11 @@ const briefTriumphCount = document.getElementById("brief-triumph-count")!;
 const triumphToast = document.getElementById("triumph-toast")!;
 const triumphNameEl = document.getElementById("triumph-name")!;
 const triumphDescEl = document.getElementById("triumph-desc")!;
+const pauseToggle = document.getElementById("pause-toggle") as HTMLButtonElement;
+const pauseScreen = document.getElementById("pause-screen")!;
+const pauseResume = document.getElementById("pause-resume") as HTMLButtonElement;
+const comboPips = document.getElementById("combo-pips")!;
+const comboPipItems = Array.from(comboPips.querySelectorAll("i"));
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -215,7 +220,7 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => held.delete(e.key.toLowerCase()));
 addEventListener("mousedown", (e) => {
   if (e.button !== 0) { return; }
-  if ((e.target as HTMLElement | null)?.closest?.("#sound-toggle, #help-toggle, #brief, .brief-button")) { return; }
+  if ((e.target as HTMLElement | null)?.closest?.("#sound-toggle, #help-toggle, #pause-toggle, #pause-screen, #brief, .brief-button")) { return; }
   mouseHeld = true;
   attackQueued = true;
 });
@@ -319,6 +324,14 @@ async function main() {
   briefAction.addEventListener("click", beginOrClose);
   helpToggle.addEventListener("click", () => setBrief(true));
 
+  function togglePause() {
+    if (!room.state.started) { return; }
+    room.send("togglePause");
+  }
+
+  pauseToggle.addEventListener("click", togglePause);
+  pauseResume.addEventListener("click", togglePause);
+
   addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
     if (key === "h") {
@@ -334,6 +347,9 @@ async function main() {
     } else if (e.key === "Escape" && briefOpen && room.state.started) {
       e.preventDefault();
       setBrief(false);
+    } else if (key === "p" && !briefOpen) {
+      e.preventDefault();
+      togglePause();
     }
   });
 
@@ -455,6 +471,19 @@ async function main() {
         ? "chain blades"
         : "axe of the storm";
 
+    const comboStep = self.weapon === 2 ? Math.min(2, self.comboStep ?? 0) : 0;
+    comboPips.classList.toggle("is-hidden", self.weapon !== 2);
+    comboPips.classList.toggle("is-ready", comboStep >= 2);
+    comboPipItems.forEach((pip, index) => {
+      pip.classList.toggle("is-lit", index < comboStep);
+    });
+
+    const paused = room.state.paused === true;
+    pauseToggle.classList.toggle("is-paused", paused);
+    pauseToggle.setAttribute("aria-label", paused ? "Resume" : "Pause");
+    pauseToggle.title = paused ? "Resume" : "Pause";
+    pauseScreen.classList.toggle("is-visible", paused);
+
     const mode = room.state.stormMode;
     const seconds = Math.ceil(room.state.stormTimer);
     const stormText =
@@ -487,6 +516,9 @@ async function main() {
       statusText = `wave cleared. next wave in ${Math.ceil(room.state.waveTimer)}s.`;
     } else {
       statusText = `wave ${Math.max(1, room.state.wave)}. ${self.kills} slain. ${foes} foes.`;
+    }
+    if (paused) {
+      statusText = "the hunt is paused";
     }
     if (statusText !== statusEl.textContent) {
       statusEl.textContent = statusText;
@@ -658,8 +690,8 @@ async function main() {
   camera.position.set(startX, 12, startZ + 23);
   camera.lookAt(startX, 5.2, startZ);
 
-  loadingEl.classList.add("is-hidden");
-  window.setTimeout(() => loadingEl.remove(), 900);
+  loadingEl?.classList.add("is-hidden");
+  window.setTimeout(() => loadingEl?.remove(), 900);
   window.setTimeout(() => voices.play("intro"), 1000);
   setBrief(!room.state.started);
 
@@ -671,6 +703,7 @@ async function main() {
   let lastOutside = -100;
   let lastKillCall = -100;
   let lastHitVoice = -100;
+  let lastThrowSeq = self.throwSeq ?? 0;
   let rageSpokenAt = -100;
   let defeatTimer = 0;
   let lastRage = false;
@@ -700,6 +733,16 @@ async function main() {
     const steps = predict.tick(now);
 
     for (let i = 0; i < steps; i++) {
+      if (room.state.paused) {
+        input.data.moveX = 0;
+        input.data.moveY = 0;
+        input.data.attack = 0;
+        input.data.special = 0;
+        input.data.switchWeapon = 0;
+        input.send();
+        continue;
+      }
+
       if (briefOpen && !room.state.started) {
         input.data.moveX = 0;
         input.data.moveY = 0;
@@ -775,6 +818,16 @@ async function main() {
     const pz = toWorldZ(playerY());
     const vx = predict.value(self, "vx") ?? self.vx;
     const vy = predict.value(self, "vy") ?? self.vy;
+
+    if (self.throwSeq !== lastThrowSeq) {
+      lastThrowSeq = self.throwSeq;
+      const throwX = toWorldX(self.throwX);
+      const throwZ = toWorldZ(self.throwY);
+      fx.chainThrow(px, pz, throwX, throwZ);
+      selfRig?.rig.throwChain();
+      voices.playSfx("sword");
+      fx.kick(0.55);
+    }
 
     // Foes: drive their rigs, detect axe hits, and let nearby ones swing.
     for (const [id, enemy] of room.state.enemies) {
@@ -1008,15 +1061,17 @@ async function main() {
 main().catch((error) => {
   console.error(error);
   statusEl.textContent = "could not connect";
-  const message = document.createElement("p");
-  message.textContent = "The storm could not reach this arena. Is the server running?";
-  loadingEl.appendChild(message);
-  if (!(import.meta as any).env?.VITE_SERVER_URL && location.hostname !== "localhost") {
-    const hint = document.createElement("p");
-    hint.textContent = "Static deployment: set VITE_SERVER_URL to the public Colyseus server.";
-    loadingEl.appendChild(hint);
+  if (loadingEl) {
+    const message = document.createElement("p");
+    message.textContent = "The storm could not reach this arena. Is the server running?";
+    loadingEl.appendChild(message);
+    if (!(import.meta as any).env?.VITE_SERVER_URL && location.hostname !== "localhost") {
+      const hint = document.createElement("p");
+      hint.textContent = "Static deployment: set VITE_SERVER_URL to the public Colyseus server.";
+      loadingEl.appendChild(hint);
+    }
+    loadingEl.classList.add("has-error");
   }
-  loadingEl.classList.add("has-error");
 });
 
 addEventListener("resize", () => {
