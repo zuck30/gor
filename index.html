@@ -232,7 +232,8 @@
         text-shadow: 0 2px 14px rgba(0, 0, 0, 0.8);
       }
       .health {
-        display: flex;
+        display: grid;
+        grid-template-columns: 38px var(--bar-width) 44px;
         align-items: center;
         gap: 10px;
         padding: 9px 13px;
@@ -279,7 +280,8 @@
       }
 
       .rage {
-        display: flex;
+        display: grid;
+        grid-template-columns: 38px var(--bar-width) 44px;
         align-items: center;
         gap: 10px;
         padding: 9px 13px;
@@ -1016,7 +1018,6 @@
           <span>rage</span>
           <span class="rage-track"><i id="rage-fill"></i></span>
           <span id="rage-value">0</span>
-          <kbd>Q</kbd>
         </div>
         <div class="weapon">
           <span id="weapon-name">chain blades</span>
