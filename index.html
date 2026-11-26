@@ -348,6 +348,86 @@
       }
       .combo-pips.is-hidden { display: none; }
 
+      #cinematic {
+        position: fixed;
+        inset: 0;
+        z-index: 32;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.45s ease;
+      }
+      #cinematic.is-visible { opacity: 1; }
+      .cine-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 0;
+        background: #030404;
+        transition: height 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .cine-top { top: 0; }
+      .cine-bottom { bottom: 0; }
+      #cinematic.is-visible .cine-top,
+      #cinematic.is-visible .cine-bottom { height: 11vh; }
+      .cine-kicker,
+      .cine-title {
+        position: absolute;
+        left: 50%;
+        margin: 0;
+        transform: translate(-50%, 10px);
+        text-align: center;
+        opacity: 0;
+        transition: opacity 0.8s ease, transform 0.8s ease;
+      }
+      #cinematic.is-visible .cine-kicker,
+      #cinematic.is-visible .cine-title {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+      .cine-kicker {
+        top: calc(11vh + 18px);
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .cine-title {
+        top: calc(11vh + 36px);
+        width: min(920px, 92vw);
+        font-family: "GodOfWar", "Cinzel", Georgia, serif;
+        font-size: clamp(28px, 4.6vw, 58px);
+        font-weight: 400;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #efe4cc;
+        text-shadow: 0 4px 40px rgba(0, 0, 0, 0.85), 0 0 50px rgba(120, 205, 255, 0.22);
+      }
+      #thunder-flash {
+        position: fixed;
+        inset: 0;
+        z-index: 34;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(
+          circle at 50% 55%,
+          rgba(238, 251, 255, 0.98),
+          rgba(132, 207, 255, 0.62) 34%,
+          rgba(60, 120, 255, 0.14) 66%,
+          transparent 86%
+        );
+      }
+      body.is-cinematic .hud,
+      body.is-cinematic .footer-hud,
+      body.is-cinematic #warning,
+      body.is-cinematic #voice-line,
+      body.is-cinematic #triumph-toast,
+      body.is-cinematic #boss-bar {
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+
       #pause-screen {
         position: fixed;
         inset: 0;
@@ -1111,6 +1191,14 @@
         </div>
       </div>
     </div>
+
+    <div id="cinematic">
+      <div class="cine-bar cine-top"></div>
+      <div class="cine-bar cine-bottom"></div>
+      <p class="cine-kicker">Mwanafyale</p>
+      <h2 class="cine-title">The storm answers</h2>
+    </div>
+    <div id="thunder-flash"></div>
 
     <div id="pause-screen">
       <div class="pause-panel">

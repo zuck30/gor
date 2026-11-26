@@ -68,6 +68,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private joinCount = 0;
   private started = false;
   private idleTime = 0;
+  private cinematicRemaining = 0;
   private storm!: StormRuntime;
   private nextEnemyId = 0;
   private waveActive = false;
@@ -121,6 +122,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.onMessage("togglePause", () => {
       if (!this.started) { return; }
       this.state.paused = !this.state.paused;
+    });
+
+    this.onMessage("rageCinematic", () => {
+      if (!this.started || this.state.paused) { return; }
+      this.cinematicRemaining = 4.8;
     });
 
     if (process.env.NODE_ENV !== "production") {
@@ -657,6 +663,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     const dt = ctx.dt;
 
     if (this.state.paused) {
+      return;
+    }
+
+    if (this.cinematicRemaining > 0) {
+      this.cinematicRemaining = Math.max(0, this.cinematicRemaining - dt);
       return;
     }
 

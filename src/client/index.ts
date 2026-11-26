@@ -63,11 +63,21 @@ const pauseScreen = document.getElementById("pause-screen")!;
 const pauseResume = document.getElementById("pause-resume") as HTMLButtonElement;
 const comboPips = document.getElementById("combo-pips")!;
 const comboPipItems = Array.from(comboPips.querySelectorAll("i"));
+const cinematicEl = document.getElementById("cinematic")!;
+const thunderFlashEl = document.getElementById("thunder-flash") as HTMLElement;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
 
 const voices = new VoicePlayer();
+
+function flashScreen(strength = 1) {
+  thunderFlashEl.style.transition = "none";
+  thunderFlashEl.style.opacity = String(Math.min(1, strength));
+  void thunderFlashEl.offsetWidth;
+  thunderFlashEl.style.transition = "opacity 0.6s ease-out";
+  thunderFlashEl.style.opacity = "0";
+}
 
 let toastTimer = 0;
 
@@ -326,6 +336,7 @@ async function main() {
 
   function togglePause() {
     if (!room.state.started) { return; }
+    if (document.body.classList.contains("is-cinematic")) { return; }
     room.send("togglePause");
   }
 
@@ -703,6 +714,7 @@ async function main() {
   let lastOutside = -100;
   let lastKillCall = -100;
   let lastHitVoice = -100;
+  let lastThunderAt = -100;
   let lastThrowSeq = self.throwSeq ?? 0;
   let rageSpokenAt = -100;
   let defeatTimer = 0;
@@ -718,22 +730,49 @@ async function main() {
 
   let lastTime = performance.now();
   let elapsed = 0;
+  let worldElapsed = 0;
   let damage = 0;
   let hurt = 0;
   let lastSelfHealth = self.health;
   let intro = 4.2;
+  let cinematicTime = 0;
+  let cinematicActive = false;
+  const CINEMATIC_SECONDS = 4.6;
   const cameraTarget = new THREE.Vector3();
   const chaseTarget = new THREE.Vector3();
   const desiredCamera = new THREE.Vector3();
   const introCamera = new THREE.Vector3();
   const introTarget = new THREE.Vector3(0, 11, 0);
+  const cinematicCamera = new THREE.Vector3();
+  const cinematicTarget = new THREE.Vector3();
   const sunOffset = new THREE.Vector3();
+
+  function startRageCinematic(px: number, pz: number) {
+    if (cinematicActive) { return; }
+    cinematicActive = true;
+    cinematicTime = CINEMATIC_SECONDS;
+    intro = 0;
+    document.body.classList.add("is-cinematic");
+    cinematicEl.classList.add("is-visible");
+    room.send("rageCinematic");
+    fx.thunder(px, pz, 2.8);
+    fx.kick(1.05);
+    flashScreen(1);
+    voices.playSfx("thunder", 1, 4700);
+  }
+
+  function endRageCinematic() {
+    cinematicActive = false;
+    cinematicTime = 0;
+    document.body.classList.remove("is-cinematic");
+    cinematicEl.classList.remove("is-visible");
+  }
 
   function frame(now: number) {
     const steps = predict.tick(now);
 
     for (let i = 0; i < steps; i++) {
-      if (room.state.paused) {
+      if (room.state.paused || cinematicTime > 0) {
         input.data.moveX = 0;
         input.data.moveY = 0;
         input.data.attack = 0;
@@ -795,7 +834,17 @@ async function main() {
     const dt = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
     elapsed += dt;
-    stormDt = dt;
+
+    const cinematic = cinematicTime > 0;
+    const worldDt = cinematic ? dt * 0.22 : dt;
+    worldElapsed += worldDt;
+    stormDt = worldDt;
+    if (cinematicTime > 0) {
+      cinematicTime = Math.max(0, cinematicTime - dt);
+      if (cinematicTime === 0) {
+        endRageCinematic();
+      }
+    }
 
     for (const [sessionId, player] of room.state.players) {
       const entry = characters.get(sessionId);
@@ -810,7 +859,7 @@ async function main() {
       entry.rig.setWeapon(player.weapon ?? 0);
       const vx = predict.value(player, "vx") ?? player.vx;
       const vy = predict.value(player, "vy") ?? player.vy;
-      entry.rig.update(dt, elapsed, vx, vy, player.health, camera, player.raging);
+      entry.rig.update(worldDt, worldElapsed, vx, vy, player.health, camera, player.raging);
     }
 
     const selfEntry = characters.get(room.sessionId);
@@ -840,8 +889,8 @@ async function main() {
       entry.rig.group.position.x = ex;
       entry.rig.group.position.z = ez;
       entry.rig.update(
-        dt,
-        elapsed,
+        worldDt,
+        worldElapsed,
         enemy.vx,
         enemy.vy,
         enemy.health,
@@ -855,9 +904,16 @@ async function main() {
         if (enemy.health < entry.lastHealth - 0.5) {
           fx.hit(ex, 3.2 * stats.scale, ez, enemy.kind);
           voices.playSfx("cry");
+          if (self.raging && elapsed - lastThunderAt > 0.4) {
+            lastThunderAt = elapsed;
+            fx.thunder(ex, ez, 1.15);
+            flashScreen(0.32);
+            fx.kick(0.3);
+            voices.playSfx("thunder", 0.35, 650);
+          }
         }
         const distance = Math.hypot(ex - px, ez - pz);
-        entry.attackCooldown -= dt;
+        entry.attackCooldown -= worldDt;
         if (distance < (stats.range + stats.radius) * 1.4 + 8 && entry.attackCooldown <= 0) {
           entry.rig.attack();
           entry.attackCooldown = stats.cooldown;
@@ -898,20 +954,41 @@ async function main() {
     if (!(window as any).__freezeCamera) {
       chaseTarget.set(px + vx * 0.18, 5.2, pz + vy * 0.18);
       desiredCamera.set(px + vx * 0.06, 11, pz + 20 + vy * 0.06);
-      const follow = 1 - Math.exp(-6 * dt);
-      camera.position.lerp(desiredCamera, follow);
-      cameraTarget.copy(chaseTarget);
 
-      if (intro > 0) {
-        intro = Math.max(0, intro - dt);
-        const raw = 1 - intro / 4.2;
-        const ease = raw * raw * (3 - 2 * raw);
-        const length = Math.hypot(px, pz);
-        const nx = length > 1 ? -px / length : 0;
-        const nz = length > 1 ? -pz / length : 1;
-        introCamera.set(px - nx * 34, 19, pz - nz * 34);
-        camera.position.lerpVectors(introCamera, desiredCamera, ease);
-        cameraTarget.lerpVectors(introTarget, chaseTarget, ease);
+      if (cinematicTime > 0) {
+        const progress = 1 - cinematicTime / CINEMATIC_SECONDS;
+        const ease = progress * progress * (3 - 2 * progress);
+        const angle = 0.55 + ease * 1.25;
+        const radius = 27 - ease * 4;
+        cinematicCamera.set(
+          px + Math.cos(angle) * radius,
+          7.5 + Math.sin(ease * Math.PI) * 10,
+          pz + Math.sin(angle) * radius
+        );
+        cinematicTarget.set(px, 6 + ease * 12, pz);
+        const returnBlend = Math.max(0, (progress - 0.84) / 0.16);
+        camera.position.copy(cinematicCamera);
+        cameraTarget.copy(cinematicTarget);
+        if (returnBlend > 0) {
+          camera.position.lerp(desiredCamera, returnBlend);
+          cameraTarget.lerp(chaseTarget, returnBlend);
+        }
+      } else {
+        const follow = 1 - Math.exp(-6 * dt);
+        camera.position.lerp(desiredCamera, follow);
+        cameraTarget.copy(chaseTarget);
+
+        if (intro > 0) {
+          intro = Math.max(0, intro - dt);
+          const raw = 1 - intro / 4.2;
+          const ease = raw * raw * (3 - 2 * raw);
+          const length = Math.hypot(px, pz);
+          const nx = length > 1 ? -px / length : 0;
+          const nz = length > 1 ? -pz / length : 1;
+          introCamera.set(px - nx * 34, 19, pz - nz * 34);
+          camera.position.lerpVectors(introCamera, desiredCamera, ease);
+          cameraTarget.lerpVectors(introTarget, chaseTarget, ease);
+        }
       }
 
       camera.lookAt(cameraTarget);
@@ -930,9 +1007,9 @@ async function main() {
 
     // Storm + world.
     syncStorm();
-    props.update(dt, elapsed);
-    atmosphere.update(dt, elapsed);
-    fx.update(dt);
+    props.update(worldDt, worldElapsed);
+    atmosphere.update(worldDt, worldElapsed);
+    fx.update(worldDt);
 
     const stormX = toWorldX(room.state.stormX);
     const stormZ = toWorldZ(room.state.stormY);
@@ -999,6 +1076,8 @@ async function main() {
         voices.play("rage");
       }
       board.award("rage");
+    } else if (lastRage && !self.raging && self.alive && !room.state.paused) {
+      startRageCinematic(px, pz);
     }
     lastRage = self.raging;
 

@@ -137,6 +137,7 @@ export const SFX = {
   sword: { file: "sword-sound.mp3", volume: 0.55, voices: 2 },
   cry: { file: "enemy-cry.mp3", volume: 0.45, voices: 4 },
   gone: { file: "enemy-gone.mp3", volume: 0.55, voices: 3 },
+  thunder: { file: "thunder.mp3", volume: 1.0, voices: 3 },
 } as const;
 
 export type SfxKey = keyof typeof SFX;
@@ -153,6 +154,7 @@ export class VoicePlayer {
     cursor: number;
     missing: boolean;
   }>();
+  private readonly sfxTokens = new WeakMap<HTMLAudioElement, number>();
   private readonly subtitles: HTMLDivElement;
   private readonly toggle: HTMLButtonElement;
   private subtitleTimer = 0;
@@ -198,7 +200,7 @@ export class VoicePlayer {
     this.toggle.title = this.enabled ? "Sound on" : "Sound off";
   }
 
-  playSfx(key: SfxKey) {
+  playSfx(key: SfxKey, volumeScale = 1, maxMs = 0) {
     if (!this.enabled || !this.unlocked) {
       return;
     }
@@ -224,13 +226,28 @@ export class VoicePlayer {
 
     const audio = pool.elements[pool.cursor];
     pool.cursor = (pool.cursor + 1) % pool.elements.length;
-    audio.volume = definition.volume * (0.9 + Math.random() * 0.2);
+    const token = (this.sfxTokens.get(audio) ?? 0) + 1;
+    this.sfxTokens.set(audio, token);
+
+    audio.volume = Math.min(1, definition.volume * volumeScale * (0.9 + Math.random() * 0.2));
     audio.playbackRate = 0.95 + Math.random() * 0.1;
     try {
       audio.currentTime = 0;
       audio.play().catch(() => {});
     } catch {
       // A browser that refuses audio simply stays silent.
+    }
+
+    if (maxMs > 0) {
+      window.setTimeout(() => {
+        if (this.sfxTokens.get(audio) !== token) { return; }
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch {
+          // Ignore a detached or blocked element.
+        }
+      }, maxMs);
     }
   }
 

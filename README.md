@@ -42,6 +42,9 @@ at the storm's eye after a short count.
   nearest foe for heavy damage, then snap them back.
 - Rage meter: every hit fills it, `Q` doubles your damage for eight seconds.
 - Room-wide pause button and `P` shortcut.
+- Rage thunder: hits during rage call down lightning. When rage ends, the
+  arena freezes for a slow-motion cinematic thunder strike, with letterboxing
+  and a dedicated thunder cue.
 - Death and respawn, boss health bar, kill counter, wave banners, melee hit
   sparks, camera shake and screen burn.
 - A hand-built island: ruined colonnade, braziers, banners, a floating storm

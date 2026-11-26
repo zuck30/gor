@@ -9,6 +9,7 @@ export interface CombatFX {
   hit(x: number, y: number, z: number, kind: number): void;
   kill(x: number, y: number, z: number, kind: number): void;
   chainThrow(startX: number, startZ: number, endX: number, endZ: number): void;
+  thunder(x: number, z: number, scale?: number): void;
   kick(amount: number): void;
 }
 
@@ -241,6 +242,154 @@ export function createCombatFX(): CombatFX {
     }
   }
 
+  // ---------------------------------------------------------------- thunder
+  interface ThunderStrike {
+    group: THREE.Group;
+    line: THREE.Line;
+    branches: THREE.Line[];
+    beam: THREE.Mesh;
+    beamMaterial: THREE.MeshBasicMaterial;
+    glow: THREE.Sprite;
+    material: THREE.LineBasicMaterial;
+    life: number;
+    maxLife: number;
+  }
+
+  const thunderStrikes: ThunderStrike[] = [];
+  const thunderPositions = 20;
+  for (let n = 0; n < 3; n++) {
+    const strikeGroup = new THREE.Group();
+    strikeGroup.visible = false;
+    group.add(strikeGroup);
+
+    const material = new THREE.LineBasicMaterial({
+      color: 0xd8f6ff,
+      transparent: true,
+      opacity: 1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mainGeometry = new THREE.BufferGeometry();
+    mainGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(thunderPositions * 3), 3)
+    );
+    const line = new THREE.Line(mainGeometry, material);
+    line.frustumCulled = false;
+    strikeGroup.add(line);
+
+    const branches: THREE.Line[] = [];
+    for (let b = 0; b < 2; b++) {
+      const branchGeometry = new THREE.BufferGeometry();
+      branchGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(new Float32Array(9 * 3), 3)
+      );
+      const branch = new THREE.Line(branchGeometry, material);
+      branch.frustumCulled = false;
+      strikeGroup.add(branch);
+      branches.push(branch);
+    }
+
+    const beamMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8fe7ff,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.4, 1, 7), beamMaterial);
+    beam.frustumCulled = false;
+    strikeGroup.add(beam);
+
+    const glowSprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: glow,
+        color: 0xbfeaff,
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    glowSprite.scale.setScalar(24);
+    strikeGroup.add(glowSprite);
+
+    thunderStrikes.push({
+      group: strikeGroup,
+      line,
+      branches,
+      beam,
+      beamMaterial,
+      glow: glowSprite,
+      material,
+      life: 0,
+      maxLife: 1,
+    });
+  }
+  let thunderCursor = 0;
+
+  function strikeThunder(x: number, z: number, scale: number) {
+    const strike = thunderStrikes[thunderCursor];
+    thunderCursor = (thunderCursor + 1) % thunderStrikes.length;
+
+    const top = (145 + Math.random() * 50) * scale;
+    const mainPositions = strike.line.geometry.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < thunderPositions; i++) {
+      const t = i / (thunderPositions - 1);
+      const spread = (12 + Math.random() * 18) * scale * (0.35 + t * 0.7);
+      mainPositions.setXYZ(
+        i,
+        x + (Math.random() - 0.5) * spread,
+        top * (1 - t) + 0.6,
+        z + (Math.random() - 0.5) * spread
+      );
+    }
+    mainPositions.needsUpdate = true;
+
+    strike.branches.forEach((branch) => {
+      const positions = branch.geometry.attributes.position as THREE.BufferAttribute;
+      const start = Math.floor(6 + Math.random() * 8);
+      const origin = new THREE.Vector3(
+        x + (Math.random() - 0.5) * 8,
+        top * (1 - start / thunderPositions),
+        z + (Math.random() - 0.5) * 8
+      );
+      const end = new THREE.Vector3(
+        x + (Math.random() - 0.5) * 50 * scale,
+        0.8,
+        z + (Math.random() - 0.5) * 50 * scale
+      );
+      for (let i = 0; i < 9; i++) {
+        const t = i / 8;
+        const spread = 6 * scale;
+        positions.setXYZ(
+          i,
+          origin.x + (end.x - origin.x) * t + (Math.random() - 0.5) * spread,
+          origin.y + (end.y - origin.y) * t,
+          origin.z + (end.z - origin.z) * t + (Math.random() - 0.5) * spread
+        );
+      }
+      positions.needsUpdate = true;
+    });
+
+    strike.beam.position.set(x, top / 2, z);
+    strike.beam.scale.set(scale, top, scale);
+    strike.glow.position.set(x, 2.4, z);
+    strike.glow.scale.setScalar(28 * scale);
+
+    strike.life = 0.72;
+    strike.maxLife = 0.72;
+    strike.group.visible = true;
+    strike.material.opacity = 1;
+    strike.beamMaterial.opacity = 0.24;
+    (strike.glow.material as THREE.SpriteMaterial).opacity = 0.55;
+
+    emit(x, 2, z, Math.round(40 * scale), 24 * scale, 0xbfeaff, 14);
+    ring(x, z, 0xcfefff, 3.5 * scale, 12 * scale, 0.7);
+    shake = Math.max(shake, Math.min(1.15, 0.5 * scale));
+  }
+
   const ringMeshes: Array<{
     mesh: THREE.Mesh;
     material: THREE.MeshBasicMaterial;
@@ -335,6 +484,19 @@ export function createCombatFX(): CombatFX {
         entry.material.opacity = (1 - t) * 0.85;
       }
 
+      for (const strike of thunderStrikes) {
+        if (strike.life <= 0) { continue; }
+        strike.life -= dt;
+        if (strike.life <= 0) {
+          strike.group.visible = false;
+          continue;
+        }
+        const fade = strike.life / strike.maxLife;
+        strike.material.opacity = fade;
+        strike.beamMaterial.opacity = fade * 0.24;
+        (strike.glow.material as THREE.SpriteMaterial).opacity = fade * 0.55;
+      }
+
       for (const fx of chainThrows) {
         if (!fx.active) { continue; }
         fx.time += dt;
@@ -398,6 +560,9 @@ export function createCombatFX(): CombatFX {
     },
     chainThrow(startX, startZ, endX, endZ) {
       startChainThrow(startX, startZ, endX, endZ);
+    },
+    thunder(x, z, scale = 1) {
+      strikeThunder(x, z, scale);
     },
     kick(amount) {
       shake = Math.max(shake, amount);
