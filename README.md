@@ -3,15 +3,6 @@
 Mwanafyale, the God of Rage. A browser action game on a storm-wracked island.
 Fight waves of draugr, trolls, gods, and colossi while the storm closes in.
 
-**Run**
-
-```bash
-npm install
-npm start
-```
-
-Open `http://localhost:5173`.
-
 **Controls**
 
 <div align="center">
