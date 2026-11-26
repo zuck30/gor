@@ -32,6 +32,7 @@
         --danger: #ff8f6b;
         --blood: #a8342a;
         --rage: #e05a2a;
+        --bar-width: clamp(120px, 18vw, 180px);
       }
 
       * { box-sizing: border-box; }
@@ -244,12 +245,19 @@
         border-radius: 10px;
         backdrop-filter: blur(8px);
       }
-      .health-track {
-        width: clamp(120px, 18vw, 180px);
+      .health-track,
+      .rage-track {
+        flex: 0 0 var(--bar-width);
+        width: var(--bar-width);
         height: 6px;
         overflow: hidden;
         background: rgba(255, 255, 255, 0.08);
         border-radius: 999px;
+      }
+      .health > span:first-child,
+      .rage > span:first-child {
+        flex: 0 0 38px;
+        width: 38px;
       }
       #health-fill {
         display: block;
@@ -283,13 +291,6 @@
         border: 1px solid rgba(224, 90, 42, 0.35);
         border-radius: 10px;
         backdrop-filter: blur(8px);
-      }
-      .rage-track {
-        width: clamp(120px, 18vw, 180px);
-        height: 6px;
-        overflow: hidden;
-        background: rgba(255, 255, 255, 0.08);
-        border-radius: 999px;
       }
       #rage-fill {
         display: block;
@@ -956,7 +957,7 @@
         .minimap canvas { width: 120px; height: 120px; }
         .controls { display: none; }
         .footer-hud { flex-direction: column; align-items: flex-start; }
-        .rage-track, .health-track { width: 130px; }
+        :root { --bar-width: 130px; }
         .brief-grid { grid-template-columns: 1fr; }
         #triumph-list { grid-template-columns: 1fr 1fr; }
         #triumph-toast { top: 170px; right: 12px; width: 230px; }
