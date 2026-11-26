@@ -65,6 +65,9 @@ const comboPips = document.getElementById("combo-pips")!;
 const comboPipItems = Array.from(comboPips.querySelectorAll("i"));
 const cinematicEl = document.getElementById("cinematic")!;
 const thunderFlashEl = document.getElementById("thunder-flash") as HTMLElement;
+const rotateScreen = document.getElementById("rotate-screen") as HTMLElement | null;
+const rotateGo = document.getElementById("rotate-go") as HTMLButtonElement | null;
+const rotateAnyway = document.getElementById("rotate-anyway") as HTMLButtonElement | null;
 const touchStick = document.getElementById("touch-stick") as HTMLElement | null;
 const touchKnob = document.getElementById("touch-knob") as HTMLElement | null;
 const touchAttack = document.getElementById("touch-attack") as HTMLButtonElement | null;
@@ -127,6 +130,41 @@ const touchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
 if (touchDevice) {
   document.body.classList.add("touch-device");
 }
+
+let rotateDismissed = false;
+
+function refreshOrientation() {
+  if (!touchDevice || !rotateScreen) { return; }
+  const portrait = window.innerHeight > window.innerWidth;
+  rotateScreen.classList.toggle("is-visible", portrait && !rotateDismissed);
+}
+
+async function requestLandscape() {
+  if (!touchDevice) { return; }
+  try {
+    await document.documentElement.requestFullscreen?.();
+  } catch {
+    // iOS and some browsers refuse fullscreen here.
+  }
+  try {
+    await (screen.orientation as any)?.lock?.("landscape");
+  } catch {
+    // Orientation lock is best effort. The player can rotate by hand.
+  }
+  window.setTimeout(refreshOrientation, 700);
+}
+
+rotateAnyway?.addEventListener("click", () => {
+  rotateDismissed = true;
+  refreshOrientation();
+});
+rotateGo?.addEventListener("click", () => {
+  void requestLandscape();
+});
+addEventListener("resize", refreshOrientation);
+addEventListener("orientationchange", refreshOrientation);
+refreshOrientation();
+
 const renderPixelRatio = Math.min(window.devicePixelRatio, touchDevice ? 1.5 : 2);
 
 // ---------------------------------------------------------------- renderer
