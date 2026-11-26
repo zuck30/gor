@@ -5,6 +5,12 @@ You are very strong.
 Bad monsters come. Hit them.
 The storm comes too. Stay inside the ring.
 
+**Three ways to play**
+
+- **Storm Co-op.** Fight the waves together. Pull fallen friends back up.
+- **Storm Duel.** Everyone fights everyone. First to three rounds wins.
+- **Altar Siege.** Two tribes fight for the centre altar. First to three captures wins.
+
 **How to play**
 
 <div align="center">

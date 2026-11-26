@@ -397,6 +397,187 @@
         body.touch-device #triumph-toast { top: 52%; right: 10px; width: 220px; }
       }
 
+      #mode-bar {
+        position: fixed;
+        top: calc(14px + env(safe-area-inset-top));
+        left: 50%;
+        z-index: 18;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #f2e7ce;
+        background: linear-gradient(140deg, rgba(24, 20, 16, 0.92), rgba(8, 9, 8, 0.94));
+        border: 1px solid rgba(214, 184, 74, 0.42);
+        border-radius: 999px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -8px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      #mode-bar.is-visible { opacity: 1; transform: translate(-50%, 0); }
+      #mode-name { color: var(--gold); font-weight: 700; }
+      #mode-score { color: #e8dcc4; }
+      #mode-timer {
+        padding-left: 10px;
+        border-left: 1px solid rgba(214, 184, 74, 0.28);
+        color: #b8ab94;
+      }
+      #objective-bar {
+        position: fixed;
+        top: calc(58px + env(safe-area-inset-top));
+        left: 50%;
+        z-index: 17;
+        display: none;
+        align-items: center;
+        gap: 10px;
+        width: min(440px, 82vw);
+        padding: 8px 14px;
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #d8cbb2;
+        background: rgba(10, 12, 10, 0.82);
+        border: 1px solid rgba(214, 184, 74, 0.28);
+        border-radius: 999px;
+        backdrop-filter: blur(6px);
+        transform: translateX(-50%);
+      }
+      #objective-bar.is-visible { display: flex; }
+      #objective-label { flex: 1 1 auto; white-space: nowrap; }
+      #objective-value { min-width: 34px; text-align: right; color: var(--gold); }
+      .objective-track {
+        position: relative;
+        flex: 0 0 150px;
+        height: 8px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+      }
+      #objective-fill {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        background: linear-gradient(90deg, #a33024, #e2604d);
+        box-shadow: 0 0 12px rgba(226, 96, 77, 0.45);
+        transition: width 0.2s linear, left 0.2s linear;
+      }
+      #objective-fill.is-blue {
+        background: linear-gradient(90deg, #3568ad, #69a4ef);
+        box-shadow: 0 0 12px rgba(105, 164, 239, 0.45);
+      }
+      .team-badge {
+        display: none;
+        padding: 4px 9px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #ffd8d0;
+        background: rgba(160, 48, 36, 0.35);
+        border: 1px solid rgba(226, 96, 77, 0.55);
+        border-radius: 999px;
+      }
+      .team-badge.is-visible { display: inline-flex; }
+      .team-badge.is-blue {
+        color: #d7e6ff;
+        background: rgba(45, 88, 150, 0.35);
+        border-color: rgba(105, 164, 239, 0.55);
+      }
+      #match-over {
+        position: fixed;
+        inset: 0;
+        z-index: 48;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: radial-gradient(circle at 50% 42%, rgba(20, 26, 22, 0.72), rgba(3, 5, 4, 0.94) 74%);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.4s ease;
+      }
+      #match-over.is-visible { opacity: 1; pointer-events: auto; }
+      .match-over-panel {
+        width: min(460px, 92vw);
+        padding: clamp(26px, 5vw, 40px);
+        text-align: center;
+        background: linear-gradient(150deg, rgba(32, 26, 22, 0.98), rgba(9, 10, 9, 0.99));
+        border: 1px solid rgba(214, 184, 74, 0.55);
+        outline: 1px solid rgba(214, 184, 74, 0.15);
+        outline-offset: 5px;
+        box-shadow: 0 30px 100px rgba(0, 0, 0, 0.75);
+      }
+      .match-over-kicker {
+        margin: 0 0 8px;
+        font-size: 9px;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .match-over-panel h2 {
+        margin: 0 0 12px;
+        font-family: "GodOfWar", "Cinzel", Georgia, serif;
+        font-size: clamp(38px, 8vw, 68px);
+        font-weight: 400;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #f2e7ce;
+      }
+      .match-over-sub {
+        margin: 0 0 22px;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 16px;
+        line-height: 1.5;
+        color: #b8ab94;
+      }
+      .profile-modes {
+        display: grid;
+        gap: 8px;
+        margin: 0 0 18px;
+      }
+      .profile-mode {
+        display: block;
+        width: 100%;
+        padding: 10px 12px;
+        text-align: left;
+        font: inherit;
+        color: #cdbfa5;
+        background: rgba(0, 0, 0, 0.28);
+        border: 1px solid rgba(214, 184, 74, 0.22);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s, color 0.15s;
+      }
+      .profile-mode:hover { border-color: rgba(214, 184, 74, 0.5); }
+      .profile-mode b {
+        display: block;
+        margin-bottom: 2px;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #f1e5cb;
+      }
+      .profile-mode span {
+        display: block;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 13px;
+        line-height: 1.35;
+        color: #9d917b;
+      }
+      .profile-mode.is-selected {
+        border-color: rgba(214, 184, 74, 0.85);
+        background: rgba(214, 184, 74, 0.08);
+        box-shadow: inset 0 0 22px rgba(214, 184, 74, 0.06);
+      }
+      .profile-mode.is-selected b { color: var(--gold); }
+
       @media (max-width: 760px) {
         body.touch-device .hud-right { display: none; }
         body.touch-device .brand h1 { font-size: 17px; }
@@ -1425,16 +1606,37 @@
 
     <div id="wave-banner"><span id="wave-banner-text">The hunt begins</span></div>
 
+    <div id="mode-bar">
+      <span id="mode-name">Storm Duel</span>
+      <span id="mode-score">waiting for a rival</span>
+      <span id="mode-timer">round 1</span>
+    </div>
+
+    <div id="objective-bar">
+      <span id="objective-label">altar contested</span>
+      <span class="objective-track"><i id="objective-fill"></i></span>
+      <span id="objective-value">0%</span>
+    </div>
+
     <div id="boss-bar">
       <span id="boss-name">COLOSSUS</span>
       <span class="boss-track"><i id="boss-fill"></i></span>
     </div>
 
     <div id="death-screen">
-      <p class="death-title">You died</p>
-      <p class="death-sub">The storm will return you in <span id="respawn-value">6</span></p>
+      <p class="death-title" id="death-title">You died</p>
+      <p class="death-sub"><span id="death-sub-text">The storm will return you in </span><span id="respawn-value">6</span></p>
       <p class="death-kills"><span id="death-kills">0</span> slain</p>
-      <p class="death-wave">wave <span id="death-wave">1</span> / <span id="death-triumphs">0</span> triumphs</p>
+      <p class="death-wave"><span id="death-wave-label">wave</span> <span id="death-wave">1</span> / <span id="death-triumphs">0</span> triumphs</p>
+    </div>
+
+    <div id="match-over">
+      <div class="match-over-panel">
+        <p class="match-over-kicker" id="match-over-kicker">the god of rage</p>
+        <h2 id="match-over-title">Defeat</h2>
+        <p class="match-over-sub" id="match-over-sub"></p>
+        <button id="match-over-button" class="brief-button" type="button">Rise again</button>
+      </div>
     </div>
 
     <div class="footer-hud">
@@ -1456,6 +1658,7 @@
           <kbd>E</kbd>
         </div>
         <div class="chips">
+          <span id="team-badge" class="team-badge">Red team</span>
           <span id="status">connecting…</span>
           <span id="storm-status">the storm gathers</span>
           <button id="help-toggle" type="button">rules</button>
@@ -1492,16 +1695,16 @@
     <div id="brief">
       <div class="brief-panel">
         <header class="brief-head">
-          <p class="brief-kicker">the hunt</p>
-          <h2>Survive the storm. Slay the gods.</h2>
-          <p class="brief-lead">
+          <p class="brief-kicker" id="brief-kicker">the hunt</p>
+          <h2 id="brief-title">Survive the storm. Slay the gods.</h2>
+          <p class="brief-lead" id="brief-lead">
             You are Mwanafyale, the God of Rage. The ring is the clock. Clear each wave. Every fifth wave, a colossus rises.
           </p>
         </header>
         <div class="brief-grid">
           <section class="brief-card">
             <h3>The rules</h3>
-            <ol>
+            <ol id="brief-rules">
               <li>Stay inside the ring. Outside it, the storm eats your health.</li>
               <li>Clear every foe to call the next wave.</li>
               <li>Die and you return at the storm's eye in six seconds. Your kills remain.</li>
@@ -1515,7 +1718,7 @@
             <p>Hits and kills fill <b>rage</b>. At full, press <kbd>Q</kbd> to double your damage for eight seconds.</p>
             <p class="brief-touch">On a phone, drag the stick to move and tap the big HIT button to swing. RAGE and SWAP are beside it.</p>
           </section>
-          <section class="brief-card">
+          <section class="brief-card" id="brief-foes">
             <h3>The foes</h3>
             <ul class="foe-list">
               <li><b>Draugr</b><span>fast and fragile, they come in packs</span></li>
@@ -1596,7 +1799,9 @@
       <form id="profile-form" class="profile-panel">
         <p class="profile-kicker">The God of Rage</p>
         <h2>Choose your warrior</h2>
-        <p class="profile-lead">Name yourself and pick a colour. Your allies will see both.</p>
+        <p class="profile-lead">Choose a mode, name yourself, and pick a colour. Allies will see your name and colour.</p>
+        <p class="profile-label">Game mode</p>
+        <div id="profile-modes" class="profile-modes"></div>
         <label class="profile-label" for="profile-name">Name</label>
         <input
           id="profile-name"

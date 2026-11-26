@@ -1,6 +1,10 @@
+import type { GameMode } from "./modes.js";
+
 export interface PlayerProfile {
   name: string;
   color: string;
+  /** Chosen on the profile screen. Old saved profiles default to co-op. */
+  mode: GameMode;
 }
 
 /** The eight warrior colours available before a hunt. */

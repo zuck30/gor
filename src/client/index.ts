@@ -5,6 +5,7 @@ import type { default as server } from "../app.config.js";
 import {
   ENEMY_KINDS,
   ENEMY_STATS,
+  MATCH_STATE,
   type MoveInput,
 } from "../rooms/schema/ArenaState.js";
 import { stepEntity } from "../shared/movement.js";
@@ -24,6 +25,7 @@ import { createCharacter, type CharacterRig } from "./world/character.js";
 import { createEnemy, type EnemyRig } from "./world/enemy.js";
 import { createCombatFX } from "./world/effects.js";
 import { createPostFX } from "./world/postfx.js";
+import { makeGlowTexture } from "./world/textures.js";
 import { VoicePlayer } from "./audio.js";
 import { TRIUMPHS, TriumphBoard, type Triumph } from "./triumphs.js";
 import {
@@ -33,6 +35,18 @@ import {
   sanitizeName,
   type PlayerProfile,
 } from "../shared/profile.js";
+import {
+  GAME_MODES,
+  MODE_CODE,
+  MODE_LABEL,
+  MODE_ROOM,
+  MODE_RULES,
+  MODE_TAGLINE,
+  TEAM_COLORS,
+  TEAM_NAMES,
+  sanitizeMode,
+  type GameMode,
+} from "../shared/modes.js";
 
 const statusEl = document.getElementById("status")!;
 const appEl = document.getElementById("app")!;
@@ -55,6 +69,7 @@ const deathScreen = document.getElementById("death-screen")!;
 const respawnValue = document.getElementById("respawn-value")!;
 const deathKills = document.getElementById("death-kills")!;
 const deathWaveEl = document.getElementById("death-wave")!;
+const deathWaveLabel = document.getElementById("death-wave-label")!;
 const deathTriumphsEl = document.getElementById("death-triumphs")!;
 const weaponNameEl = document.getElementById("weapon-name")!;
 const briefEl = document.getElementById("brief")!;
@@ -85,6 +100,29 @@ const profileScreen = document.getElementById("profile-screen")!;
 const profileForm = document.getElementById("profile-form") as HTMLFormElement;
 const profileNameInput = document.getElementById("profile-name") as HTMLInputElement;
 const profileColorsEl = document.getElementById("profile-colors")!;
+const profileModesEl = document.getElementById("profile-modes")!;
+const modeBar = document.getElementById("mode-bar")!;
+const modeName = document.getElementById("mode-name")!;
+const modeScore = document.getElementById("mode-score")!;
+const modeTimer = document.getElementById("mode-timer")!;
+const teamBadge = document.getElementById("team-badge")!;
+const objectiveBar = document.getElementById("objective-bar")!;
+const objectiveFill = document.getElementById("objective-fill") as HTMLElement;
+const objectiveLabel = document.getElementById("objective-label")!;
+const objectiveValue = document.getElementById("objective-value")!;
+const deathTitle = document.getElementById("death-title")!;
+const deathSubText = document.getElementById("death-sub-text")!;
+const respawnValueWrap = document.getElementById("respawn-value")!;
+const matchOverEl = document.getElementById("match-over")!;
+const matchOverKicker = document.getElementById("match-over-kicker")!;
+const matchOverTitle = document.getElementById("match-over-title")!;
+const matchOverSub = document.getElementById("match-over-sub")!;
+const matchOverButton = document.getElementById("match-over-button") as HTMLButtonElement;
+const briefKicker = document.getElementById("brief-kicker")!;
+const briefTitle = document.getElementById("brief-title")!;
+const briefLead = document.getElementById("brief-lead")!;
+const briefRules = document.getElementById("brief-rules") as HTMLOListElement;
+const briefFoes = document.getElementById("brief-foes")!;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -260,10 +298,39 @@ scene.add(storm.group);
 const fx = createCombatFX();
 scene.add(fx.group);
 
+const pickupGroup = new THREE.Group();
+const pickupSprite = new THREE.Sprite(
+  new THREE.SpriteMaterial({
+    map: makeGlowTexture(),
+    color: 0x7dffb0,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+);
+pickupSprite.scale.setScalar(6);
+pickupGroup.add(pickupSprite);
+const pickupRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.8, 2.2, 40),
+  new THREE.MeshBasicMaterial({
+    color: 0x9dffc2,
+    transparent: true,
+    opacity: 0.7,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  })
+);
+pickupRing.rotation.x = -Math.PI / 2;
+pickupGroup.add(pickupRing);
+pickupGroup.add(new THREE.PointLight(0x7dffb0, 55, 55, 2));
+pickupGroup.visible = false;
+scene.add(pickupGroup);
+
 const postfx = createPostFX(renderer, scene, camera, renderPixelRatio);
 
 if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-  (window as any).__godofrage = { scene, camera, renderer, island, water, sky, storm, props, fx };
+  (window as any).__godofrage = { scene, camera, renderer, island, water, sky, storm, props, fx, pickupGroup };
 }
 
 // ---------------------------------------------------------------- input
@@ -396,7 +463,7 @@ function axis(negative: string[], positive: string[]): -1 | 0 | 1 {
 
 /**
  * On Vercel the client is static, so the room server lives elsewhere. Set
- * VITE_SERVER_URL at build time (for example wss://tufani-server.fly.dev).
+ * VITE_SERVER_URL at build time (for example https://gor-arena.onrender.com).
  * Local development falls back to the Vite host, which also runs Colyseus.
  */
 function serverEndpoint(): string {
@@ -420,6 +487,9 @@ interface PlayerRig {
   rig: CharacterRig;
   label: string;
   color: string;
+  lastHealth: number;
+  lastAlive: boolean;
+  downedMarker: THREE.Mesh;
 }
 
 interface EnemyEntry {
@@ -440,7 +510,8 @@ function hashSeed(value: string): number {
 }
 
 async function main(profile: PlayerProfile) {
-  const room = await client.joinOrCreate("arena", profile);
+  const roomName = MODE_ROOM[profile.mode] as "coop" | "duel" | "siege";
+  const room = await client.joinOrCreate(roomName, profile);
   const predict = Predict.get(room);
 
   predict.attachAll("players", {
@@ -457,13 +528,39 @@ async function main(profile: PlayerProfile) {
   let briefOpen = false;
   let initialBrief = false;
 
+  function updateBriefForMode() {
+    const rules = MODE_RULES[profile.mode];
+    briefKicker.textContent = profile.mode === "duel"
+      ? "the duel"
+      : profile.mode === "siege"
+        ? "the siege"
+        : "the hunt";
+    briefTitle.textContent = profile.mode === "duel"
+      ? "Only one leaves the ring."
+      : profile.mode === "siege"
+        ? "Hold the altar. Break the other tribe."
+        : "Survive the storm. Slay the gods.";
+    briefLead.textContent = profile.mode === "coop"
+      ? "You are Mwanafyale, the God of Rage. The ring is the clock. Clear each wave. Every fifth wave, a colossus rises."
+      : MODE_TAGLINE[profile.mode];
+    briefRules.innerHTML = "";
+    for (const rule of rules) {
+      const item = document.createElement("li");
+      item.textContent = rule;
+      briefRules.append(item);
+    }
+    briefFoes.style.display = profile.mode === "duel" ? "none" : "";
+  }
+
   function setBrief(open: boolean) {
     briefOpen = open;
     briefEl.classList.toggle("is-visible", open);
     if (open) {
       briefAction.textContent = room.state.started
-        ? "Return to the hunt"
-        : "Begin the hunt";
+        ? "Return to the fight"
+        : profile.mode === "coop"
+          ? "Begin the hunt"
+          : "Enter the arena";
       renderTriumphs();
     }
   }
@@ -480,6 +577,10 @@ async function main(profile: PlayerProfile) {
   helpToggle.addEventListener("click", () => setBrief(true));
 
   function togglePause() {
+    if (profile.mode !== "coop") {
+      announce("Pause is co-op only", 1600);
+      return;
+    }
     if (!room.state.started) { return; }
     if (document.body.classList.contains("is-cinematic")) { return; }
     if (room.state.players.size > 1 && !room.state.paused) {
@@ -491,6 +592,7 @@ async function main(profile: PlayerProfile) {
 
   pauseToggle.addEventListener("click", togglePause);
   pauseResume.addEventListener("click", togglePause);
+  matchOverButton.addEventListener("click", () => room.send("restart"));
 
   addEventListener("keydown", (e) => {
     const key = e.key.toLowerCase();
@@ -576,8 +678,29 @@ async function main(profile: PlayerProfile) {
     const isSelf = sessionId === room.sessionId;
     const { label, color } = characterIdentity(sessionId, fallbackName, fallbackColor);
     const rig = createCharacter({ isSelf, sessionId, label, color });
+    const downedMarker = new THREE.Mesh(
+      new THREE.RingGeometry(2.6, 3.3, 36),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6a4a,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
+    );
+    downedMarker.rotation.x = -Math.PI / 2;
+    downedMarker.position.y = 0.09;
+    downedMarker.visible = false;
+    rig.group.add(downedMarker);
     scene.add(rig.group);
-    const entry = { rig, label, color };
+    const entry = {
+      rig,
+      label,
+      color,
+      lastHealth: room.state.players.get(sessionId)?.health ?? 100,
+      lastAlive: room.state.players.get(sessionId)?.alive ?? true,
+      downedMarker,
+    };
     characters.set(sessionId, entry);
     if (isSelf) {
       selfRig = entry;
@@ -703,27 +826,38 @@ async function main(profile: PlayerProfile) {
       pip.classList.toggle("is-lit", index < comboStep);
     });
 
+    const gameMode = room.state.mode;
+    const coop = gameMode === MODE_CODE.coop;
+    const duel = gameMode === MODE_CODE.duel;
+    const siege = gameMode === MODE_CODE.siege;
     const paused = room.state.paused === true;
+    const matchOver = room.state.matchState === MATCH_STATE.matchOver;
+    const roundOver = room.state.matchState === MATCH_STATE.roundOver;
+
     pauseToggle.classList.toggle("is-paused", paused);
     pauseToggle.setAttribute("aria-label", paused ? "Resume" : "Pause");
     pauseToggle.title = paused ? "Resume" : "Pause";
     pauseScreen.classList.toggle("is-visible", paused);
 
-    const mode = room.state.stormMode;
+    const stormMode = room.state.stormMode;
     const seconds = Math.ceil(room.state.stormTimer);
     const stormText =
-      mode === 0 ? `storm closes in ${seconds}s`
-      : mode === 1 ? `storm closing: ${seconds}s`
+      stormMode === 0 ? `storm closes in ${seconds}s`
+      : stormMode === 1 ? `storm closing: ${seconds}s`
       : "final storm";
     if (stormText !== stormStatusEl.textContent) {
       stormStatusEl.textContent = stormText;
-      stormStatusEl.classList.toggle("is-closing", mode === 1);
+      stormStatusEl.classList.toggle("is-closing", stormMode === 1);
     }
 
     let foes = 0;
+    let aliveCount = 0;
     let bossHealth = 0;
     let bossMax = 0;
-    for (const [, enemy] of room.state.enemies) {
+    let bestOpponentName = "";
+    let bestOpponentWins = -1;
+    for (const [sessionId, enemy] of room.state.enemies) {
+      void sessionId;
       if (!enemy.alive) { continue; }
       foes += 1;
       if (enemy.kind === 3) {
@@ -731,12 +865,79 @@ async function main(profile: PlayerProfile) {
         bossMax = enemy.maxHealth;
       }
     }
+    for (const [sessionId, player] of room.state.players) {
+      if (player.alive) { aliveCount += 1; }
+      if (sessionId !== room.sessionId && player.wins > bestOpponentWins) {
+        bestOpponentWins = player.wins;
+        bestOpponentName = player.name;
+      }
+    }
+
+    modeBar.classList.toggle("is-visible", duel || siege);
+    objectiveBar.classList.toggle("is-visible", siege);
+    teamBadge.classList.toggle("is-visible", siege);
+
+    if (duel) {
+      modeName.textContent = MODE_LABEL.duel;
+      modeScore.textContent = room.state.players.size > 1
+        ? `you ${self.wins} - ${Math.max(0, bestOpponentWins)} ${bestOpponentName || "rival"}`
+        : "waiting for a rival";
+      modeTimer.textContent = roundOver
+        ? "round over"
+        : `round ${Math.max(1, room.state.round)}`;
+    } else if (siege) {
+      modeName.textContent = MODE_LABEL.siege;
+      modeScore.textContent = `red ${room.state.scoreRed} - ${room.state.scoreBlue} blue`;
+      modeTimer.textContent = roundOver
+        ? "capture over"
+        : `${Math.max(0, Math.ceil(room.state.roundTimer))}s`;
+      teamBadge.textContent = `${TEAM_NAMES[self.team] ?? "Red"} team`;
+      teamBadge.classList.toggle("is-blue", self.team === 1);
+
+      const altar = room.state.altar;
+      const width = Math.min(50, Math.abs(altar) / 2);
+      objectiveFill.style.width = `${width}%`;
+      objectiveFill.style.left = altar < 0 ? `${50 + altar / 2}%` : "50%";
+      objectiveFill.classList.toggle("is-blue", altar < 0);
+      objectiveLabel.textContent = altar > 2
+        ? "red holds the altar"
+        : altar < -2
+          ? "blue holds the altar"
+          : "altar contested";
+      objectiveValue.textContent = `${Math.min(100, Math.round(Math.abs(altar)))}%`;
+    }
 
     let statusText: string;
     if (!room.state.started) {
-      statusText = "the hunt awaits";
+      statusText = coop
+        ? "the hunt awaits"
+        : room.state.players.size < 2
+          ? "waiting for rivals"
+          : "the storm gathers";
+    } else if (matchOver) {
+      statusText = room.state.winnerName
+        ? `${room.state.winnerName} wins`
+        : "the match is over";
+    } else if (roundOver) {
+      statusText = room.state.roundWinner
+        ? `${room.state.roundWinner} takes the round`
+        : "the round is over";
     } else if (!self.alive) {
-      statusText = `fallen. returning in ${Math.max(0, Math.ceil(self.respawnTimer))}s.`;
+      if (coop && self.downed) {
+        statusText = self.reviveProgress > 0
+          ? `down. ally revive ${Math.round(self.reviveProgress * 100)}%.`
+          : `down. bleeding out in ${Math.max(0, Math.ceil(self.respawnTimer))}s.`;
+      } else if (coop) {
+        statusText = "out until the wave clears";
+      } else if (duel) {
+        statusText = "fallen. waiting for the next round.";
+      } else {
+        statusText = `fallen. returning in ${Math.max(0, Math.ceil(self.respawnTimer))}s.`;
+      }
+    } else if (duel) {
+      statusText = `round ${Math.max(1, room.state.round)}. ${self.wins} wins. ${aliveCount} standing.`;
+    } else if (siege) {
+      statusText = `hold the altar. ${self.kills} slain. ${foes} monsters.`;
     } else if (foes === 0 && room.state.waveTimer > 0) {
       statusText = `wave cleared. next wave in ${Math.ceil(room.state.waveTimer)}s.`;
     } else {
@@ -744,12 +945,19 @@ async function main(profile: PlayerProfile) {
     }
     if (paused) {
       statusText = "the hunt is paused";
+    } else if (coop && self.alive) {
+      for (const [sessionId, player] of room.state.players) {
+        if (sessionId !== room.sessionId && player.downed) {
+          statusText = `${player.name} is down. Stand close to revive.`;
+          break;
+        }
+      }
     }
     if (statusText !== statusEl.textContent) {
       statusEl.textContent = statusText;
     }
 
-    if (bossMax > 0) {
+    if (bossMax > 0 && !duel) {
       bossBar.classList.add("is-visible");
       bossName.textContent = "COLOSSUS OF THE STORM";
       bossFill.style.width = `${Math.max(0, (bossHealth / bossMax) * 100)}%`;
@@ -757,12 +965,76 @@ async function main(profile: PlayerProfile) {
       bossBar.classList.remove("is-visible");
     }
 
-    deathScreen.classList.toggle("is-visible", !self.alive);
-    if (!self.alive) {
-      respawnValue.textContent = String(Math.max(0, Math.ceil(self.respawnTimer)));
+    const showDeath = !self.alive && !matchOver;
+    deathScreen.classList.toggle("is-visible", showDeath);
+    if (showDeath) {
+      let title = "You died";
+      let sub = "The storm will return you in";
+      let showCountdown = false;
+
+      if (coop && self.downed) {
+        title = "You are down";
+        sub = self.reviveProgress > 0
+          ? `An ally is reviving you: ${Math.round(self.reviveProgress * 100)}%`
+          : `Bleeding out in ${Math.max(0, Math.ceil(self.respawnTimer))}s. Stay close to an ally.`;
+      } else if (coop && self.out) {
+        title = "You are out";
+        sub = "Your allies fight on. You return when the wave is cleared.";
+      } else if (duel && roundOver) {
+        title = "Round over";
+        sub = room.state.roundWinner
+          ? `${room.state.roundWinner} takes the round.`
+          : "The round is a draw.";
+      } else if (duel) {
+        title = "You fell";
+        sub = "You wait for the next round.";
+      } else if (siege && roundOver) {
+        title = "Capture over";
+        sub = room.state.roundWinner
+          ? `${room.state.roundWinner} takes the altar.`
+          : "The altar is contested.";
+      } else {
+        showCountdown = true;
+      }
+
+      deathTitle.textContent = title;
+      deathSubText.textContent = sub;
+      respawnValueWrap.style.display = showCountdown ? "" : "none";
+      if (showCountdown) {
+        respawnValue.textContent = String(Math.max(0, Math.ceil(self.respawnTimer)));
+      }
       deathKills.textContent = String(self.kills);
-      deathWaveEl.textContent = String(Math.max(1, room.state.wave));
+      deathWaveLabel.textContent = coop ? "wave" : "round";
+      deathWaveEl.textContent = String(coop ? Math.max(1, room.state.wave) : Math.max(1, room.state.round));
       deathTriumphsEl.textContent = String(board.count());
+    }
+
+    matchOverEl.classList.toggle("is-visible", matchOver);
+    if (matchOver) {
+      matchOverKicker.textContent = "the god of rage";
+      if (coop) {
+        let teamKills = 0;
+        let teamRevives = 0;
+        for (const [, player] of room.state.players) {
+          teamKills += player.kills;
+          teamRevives += player.revives;
+        }
+        matchOverTitle.textContent = "The hunt ends";
+        matchOverSub.textContent = `The storm took every warrior at wave ${Math.max(1, room.state.wave)}. ${teamKills} foes slain, ${teamRevives} allies revived.`;
+      } else if (duel) {
+        const won = room.state.winnerName === self.name;
+        matchOverTitle.textContent = won ? "Victory" : "Defeat";
+        matchOverSub.textContent = room.state.winnerName
+          ? `${room.state.winnerName} wins the duel.`
+          : "The duel ends without a champion.";
+      } else {
+        const won = room.state.winnerTeam === self.team;
+        matchOverTitle.textContent = won ? "Victory" : "Defeat";
+        matchOverSub.textContent = room.state.winnerName
+          ? `${room.state.winnerName} takes the altar, ${room.state.scoreRed} to ${room.state.scoreBlue}.`
+          : "The siege ends with no victor.";
+      }
+      matchOverButton.textContent = coop ? "Rise again" : "New match";
     }
 
     if (initialBrief && room.state.started) {
@@ -771,12 +1043,20 @@ async function main(profile: PlayerProfile) {
     }
 
     const solo = room.state.players.size <= 1;
-    pauseToggle.classList.toggle("is-solo-only", !solo && !paused);
-    pauseToggle.title = !solo && !paused ? "Pause is solo only" : paused ? "Resume" : "Pause";
+    pauseToggle.classList.toggle("is-solo-only", !coop || (!solo && !paused));
+    pauseToggle.title = !coop
+      ? "Pause is co-op only"
+      : !solo && !paused
+        ? "Pause is solo only"
+        : paused
+          ? "Resume"
+          : "Pause";
     if (briefOpen) {
       briefAction.textContent = room.state.started
-        ? "Return to the hunt"
-        : "Begin the hunt";
+        ? "Return to the fight"
+        : profile.mode === "coop"
+          ? "Begin the hunt"
+          : "Enter the arena";
     }
   }
 
@@ -843,6 +1123,34 @@ async function main(profile: PlayerProfile) {
       }
     }
 
+    if (room.state.mode === MODE_CODE.siege) {
+      const altar = room.state.altar;
+      ctx.beginPath();
+      ctx.arc(cx, cz, 70 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = altar > 0
+        ? "rgba(210,74,58,0.35)"
+        : altar < 0
+          ? "rgba(74,134,216,0.35)"
+          : "rgba(240,233,208,0.18)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(240,233,208,0.65)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    if (room.state.mode === MODE_CODE.duel && room.state.pickupActive) {
+      ctx.beginPath();
+      ctx.arc(
+        mapX(toWorldX(room.state.pickupX)),
+        mapZ(toWorldZ(room.state.pickupY)),
+        4.5,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = "#7dffb0";
+      ctx.fill();
+    }
+
     // Heroes.
     for (const [sessionId, player] of room.state.players) {
       if (!player.alive) { continue; }
@@ -851,7 +1159,11 @@ async function main(profile: PlayerProfile) {
       const isSelf = sessionId === room.sessionId;
       ctx.beginPath();
       ctx.arc(pmx, pmz, isSelf ? 5.5 : 3.6, 0, Math.PI * 2);
-      ctx.fillStyle = isSelf ? "#ffd166" : "#9ad8c0";
+      ctx.fillStyle = isSelf
+        ? "#ffd166"
+        : room.state.mode === MODE_CODE.siege
+          ? TEAM_COLORS[player.team] ?? "#9ad8c0"
+          : "#9ad8c0";
       ctx.fill();
       if (isSelf) {
         ctx.strokeStyle = "#211a0b";
@@ -926,12 +1238,16 @@ async function main(profile: PlayerProfile) {
   loadingEl?.classList.add("is-hidden");
   window.setTimeout(() => loadingEl?.remove(), 900);
   window.setTimeout(() => voices.play("intro"), 1000);
+  updateBriefForMode();
+  document.body.classList.add(`mode-${profile.mode}`);
   initialBrief = !room.state.started;
   setBrief(initialBrief);
 
   let lastPhase = room.state.stormPhase;
   let lastMode = room.state.stormMode;
   let lastWave = room.state.wave;
+  let lastRound = 0;
+  let lastMatchState = room.state.matchState;
   let lastKills = self.kills;
   let lastCountdownPhase = -1;
   let lastOutside = -100;
@@ -972,7 +1288,7 @@ async function main(profile: PlayerProfile) {
 
   function startRageCinematic(px: number, pz: number) {
     if (cinematicActive) { return; }
-    if (room.state.players.size > 1) {
+    if (profile.mode !== "coop" || room.state.players.size > 1) {
       // Do not freeze allies for a personal glory shot in a shared arena.
       fx.thunder(px, pz, 2.2);
       fx.kick(0.6);
@@ -1003,7 +1319,12 @@ async function main(profile: PlayerProfile) {
     const steps = predict.tick(now);
 
     for (let i = 0; i < steps; i++) {
-      if (room.state.paused || cinematicTime > 0) {
+      if (
+        room.state.paused
+        || cinematicTime > 0
+        || room.state.matchState === MATCH_STATE.roundOver
+        || room.state.matchState === MATCH_STATE.matchOver
+      ) {
         input.data.moveX = 0;
         input.data.moveY = 0;
         input.data.attack = 0;
@@ -1084,12 +1405,48 @@ async function main(profile: PlayerProfile) {
       const mesh = entry.rig.group;
       mesh.position.x = toWorldX(predict.value(player, "x"));
       mesh.position.z = toWorldZ(predict.value(player, "y"));
-      mesh.visible = player.alive;
+      mesh.visible = player.alive || player.downed;
+      entry.downedMarker.visible = player.downed;
+      if (player.downed) {
+        entry.downedMarker.scale.setScalar(1 + Math.sin(elapsed * 4.2) * 0.12);
+      }
 
       entry.rig.setWeapon(player.weapon ?? 0);
       const vx = predict.value(player, "vx") ?? player.vx;
       const vy = predict.value(player, "vy") ?? player.vy;
+
+      if (sessionId !== room.sessionId) {
+        if (player.alive && player.health < entry.lastHealth - 0.5) {
+          fx.hit(mesh.position.x, 3.2, mesh.position.z, 0);
+          voices.playSfx("cry");
+          if (self.raging && elapsed - lastThunderAt > 0.4) {
+            lastThunderAt = elapsed;
+            fx.thunder(mesh.position.x, mesh.position.z, 1.15);
+            flashScreen(0.32);
+            fx.kick(0.3);
+            voices.playSfx("thunder", 0.35, 650);
+          }
+        } else if (!player.alive && entry.lastAlive) {
+          fx.kill(mesh.position.x, 3.2, mesh.position.z, 0);
+          voices.playSfx("gone");
+        }
+      }
+      entry.lastHealth = player.health;
+      entry.lastAlive = player.alive;
+
       entry.rig.update(worldDt, worldElapsed, vx, vy, player.health, camera, player.raging);
+    }
+
+    const pickupVisible = room.state.mode === MODE_CODE.duel && room.state.pickupActive;
+    pickupGroup.visible = pickupVisible;
+    if (pickupVisible) {
+      pickupGroup.position.set(
+        toWorldX(room.state.pickupX),
+        3 + Math.sin(elapsed * 2.4) * 0.55,
+        toWorldZ(room.state.pickupY)
+      );
+      pickupGroup.rotation.y += dt * 0.8;
+      pickupRing.rotation.z += dt * 1.4;
     }
 
     const selfEntry = characters.get(room.sessionId);
@@ -1274,7 +1631,7 @@ async function main(profile: PlayerProfile) {
       voices.play("countTen");
     }
 
-    if (room.state.wave > lastWave) {
+    if (room.state.mode === MODE_CODE.coop && room.state.wave > lastWave) {
       lastWave = room.state.wave;
       const boss = lastWave % 5 === 0;
       announce(
@@ -1286,6 +1643,35 @@ async function main(profile: PlayerProfile) {
       );
       if (lastWave > 1) {
         voices.play(boss ? "boss" : "wave");
+      }
+    }
+
+    if (room.state.mode !== MODE_CODE.coop) {
+      if (room.state.round > lastRound) {
+        lastRound = room.state.round;
+        const label = room.state.mode === MODE_CODE.duel ? "Duel" : "Siege";
+        announce(`${label} round ${lastRound}`, 1800);
+        voices.play("wave");
+      }
+      if (room.state.matchState !== lastMatchState) {
+        lastMatchState = room.state.matchState;
+        if (room.state.matchState === MATCH_STATE.roundOver) {
+          announce(
+            room.state.roundWinner
+              ? `${room.state.roundWinner} takes the round`
+              : "The round is a draw",
+            2200
+          );
+          voices.play("kill");
+        } else if (room.state.matchState === MATCH_STATE.matchOver) {
+          announce(
+            room.state.winnerName
+              ? `${room.state.winnerName} wins`
+              : "The match is over",
+            2600
+          );
+          voices.play("rage");
+        }
       }
     }
 
@@ -1326,7 +1712,14 @@ async function main(profile: PlayerProfile) {
       voices.play("survivorDeath");
       window.clearTimeout(defeatTimer);
       defeatTimer = window.setTimeout(() => voices.play("defeat"), 2100);
-      announce("You died", 2400);
+      announce(
+        profile.mode === "coop" && self.downed
+          ? "You are down"
+          : profile.mode === "duel"
+            ? "You fell"
+            : "You died",
+        2400
+      );
     } else if (!wasAlive && self.alive) {
       window.clearTimeout(defeatTimer);
       voices.play("revive");
@@ -1371,10 +1764,11 @@ function loadProfile(): PlayerProfile | null {
   try {
     const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
     if (!raw) { return null; }
-    const parsed = JSON.parse(raw) as { name?: unknown; color?: unknown };
+    const parsed = JSON.parse(raw) as { name?: unknown; color?: unknown; mode?: unknown };
     const name = sanitizeName(parsed?.name);
     const color = sanitizeColor(parsed?.color);
-    return name && color ? { name, color } : null;
+    const mode = sanitizeMode(parsed?.mode);
+    return name && color ? { name, color, mode } : null;
   } catch {
     return null;
   }
@@ -1413,7 +1807,35 @@ function startGame(profile: PlayerProfile) {
 function setupProfile() {
   const stored = loadProfile();
   let selectedColor = stored?.color ?? PLAYER_COLORS[0].value;
+  let selectedMode: GameMode = stored?.mode ?? "coop";
   profileNameInput.value = stored?.name ?? "";
+
+  const modeButtons: HTMLButtonElement[] = [];
+  GAME_MODES.forEach((mode) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "profile-mode";
+    const title = document.createElement("b");
+    title.textContent = MODE_LABEL[mode];
+    const description = document.createElement("span");
+    description.textContent = MODE_TAGLINE[mode];
+    button.append(title, description);
+    button.addEventListener("click", () => {
+      selectedMode = mode;
+      paintModes();
+    });
+    modeButtons.push(button);
+    profileModesEl.append(button);
+  });
+
+  function paintModes() {
+    modeButtons.forEach((button, index) => {
+      const selected = GAME_MODES[index] === selectedMode;
+      button.classList.toggle("is-selected", selected);
+      button.setAttribute("aria-pressed", selected ? "true" : "false");
+    });
+  }
+  paintModes();
 
   const swatches: HTMLButtonElement[] = [];
   PLAYER_COLORS.forEach((entry) => {
@@ -1442,7 +1864,7 @@ function setupProfile() {
     event.preventDefault();
     const name = sanitizeName(profileNameInput.value) || "Wanderer";
     const color = sanitizeColor(selectedColor) ?? PLAYER_COLORS[0].value;
-    const profile = { name, color };
+    const profile = { name, color, mode: selectedMode };
     saveProfile(profile);
     profileScreen.classList.add("is-hidden");
     startGame(profile);

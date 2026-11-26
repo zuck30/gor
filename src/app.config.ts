@@ -19,7 +19,12 @@ const server = defineServer({
    * Define your room handlers:
    */
   rooms: {
+    // `arena` stays as the old default. New clients use one room per mode so
+    // a duel player can never matchmake into a co-op hunt.
     arena: defineRoom(ArenaRoom).enableRealtimeListing(),
+    coop: defineRoom(ArenaRoom).enableRealtimeListing(),
+    duel: defineRoom(ArenaRoom).enableRealtimeListing(),
+    siege: defineRoom(ArenaRoom).enableRealtimeListing(),
     lobby: defineRoom(LobbyRoom),
   },
 

@@ -11,6 +11,10 @@ import {
   WEAPONS,
   CHAIN_COMBO,
   RESPAWN_SECONDS,
+  DOWNED,
+  DUEL,
+  MATCH_STATE,
+  SIEGE,
   type EnemyKind,
 } from "./schema/ArenaState.js";
 import { stepEntity } from "../shared/movement.js";
@@ -27,7 +31,9 @@ import {
   MAX_HEALTH,
   STORM_PHASES,
   STORM_START_RADIUS,
+  type StormPhase,
 } from "../shared/constants.js";
+import { MODE_CODE, TEAM_NAMES, modeForRoom, type GameMode } from "../shared/modes.js";
 import {
   applyDamage,
   lerpCircle,
@@ -39,6 +45,21 @@ import {
 /** Wire codes for `stormMode`: the client only needs to know what to draw. */
 type StormMode = "hold" | "shrink" | "final";
 const STORM_MODE: Record<StormMode, number> = { hold: 0, shrink: 1, final: 2 };
+
+/** Duel rounds are short: the ring becomes the round timer. */
+const DUEL_STORM_PHASES: readonly StormPhase[] = [
+  { hold: 14, shrink: 14, radius: 310, dps: 4 },
+  { hold: 9, shrink: 10, radius: 160, dps: 7 },
+  { hold: 6, shrink: 8, radius: 64, dps: 11 },
+];
+
+/** Siege rings close around the altar, so both tribes must fight for it. */
+const SIEGE_STORM_PHASES: readonly StormPhase[] = [
+  { hold: 22, shrink: 16, radius: 330, dps: 3 },
+  { hold: 14, shrink: 15, radius: 180, dps: 6 },
+  { hold: 9, shrink: 12, radius: 96, dps: 9 },
+  { hold: 8, shrink: 10, radius: 58, dps: 13 },
+];
 
 interface StormRuntime {
   mode: StormMode;
@@ -75,8 +96,12 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private idleTime = 0;
   private cinematicRemaining = 0;
   private storm!: StormRuntime;
+  private stormPhases: readonly StormPhase[] = STORM_PHASES;
   private nextEnemyId = 0;
   private waveActive = false;
+  private mode: GameMode = "coop";
+  private altarCharge = 0;
+  private matchOverTimer = 0;
 
   private attackCooldown = new Map<string, number>();
   private rageTimer = new Map<string, number>();
@@ -90,28 +115,29 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   };
 
   onCreate(options: any) {
-    const centre: Circle = {
-      x: ARENA_WIDTH / 2,
-      y: ARENA_HEIGHT / 2,
-      radius: STORM_START_RADIUS,
-    };
+    this.mode = modeForRoom(this.roomName, options?.mode);
+    this.stormPhases = this.mode === "duel"
+      ? DUEL_STORM_PHASES
+      : this.mode === "siege"
+        ? SIEGE_STORM_PHASES
+        : STORM_PHASES;
 
-    this.storm = {
-      mode: "hold",
-      phase: 0,
-      remaining: STORM_PHASES[0].hold,
-      duration: STORM_PHASES[0].hold,
-      from: centre,
-      to: centre,
-      dps: STORM_PHASES[0].dps,
-    };
+    this.state.mode = MODE_CODE[this.mode];
+    this.state.matchState = MATCH_STATE.waiting;
+    this.state.round = 0;
+    this.state.roundTimer = 0;
+    this.state.scoreRed = 0;
+    this.state.scoreBlue = 0;
+    this.state.altar = 0;
+    this.state.winnerTeam = 255;
+    this.state.winnerName = "";
+    this.state.roundWinner = "";
+    this.state.pickupX = ARENA_WIDTH / 2;
+    this.state.pickupY = ARENA_HEIGHT / 2;
+    this.state.pickupActive = false;
+    this.state.pickupTimer = 0;
 
-    this.writeStormCircle(centre);
-    this.state.stormPhase = 0;
-    this.state.stormMode = STORM_MODE.hold;
-    this.state.stormTimer = STORM_PHASES[0].hold;
-    this.state.stormDps = STORM_PHASES[0].dps;
-
+    this.resetStorm();
     this.state.started = false;
     this.state.paused = false;
     this.state.wave = 0;
@@ -119,13 +145,18 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
     this.onMessage("ready", () => {
       if (this.started) { return; }
-      this.started = true;
-      this.state.started = true;
-      this.state.waveTimer = 2.5;
+      // Duel and siege need an opponent before the first round.
+      if (this.mode !== "coop" && this.state.players.size < 2) { return; }
+      this.startMatch();
+    });
+
+    this.onMessage("restart", () => {
+      if (this.state.matchState !== MATCH_STATE.matchOver) { return; }
+      this.restartMatch();
     });
 
     this.onMessage("togglePause", () => {
-      if (!this.started) { return; }
+      if (this.mode !== "coop" || !this.started) { return; }
       // Solo players may pause. In a shared arena only an already-paused room
       // may be resumed, so one player can never freeze everyone else.
       if (this.state.players.size > 1 && !this.state.paused) { return; }
@@ -133,7 +164,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     });
 
     this.onMessage("rageCinematic", () => {
-      if (!this.started || this.state.paused) { return; }
+      if (this.mode !== "coop" || !this.started || this.state.paused) { return; }
       // The slow-motion finale freezes the arena, so it is solo only.
       if (this.state.players.size > 1) { return; }
       this.cinematicRemaining = 4.8;
@@ -159,26 +190,65 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.setFixedTimestep((ctx) => this.step(ctx), TICK_RATE);
   }
 
-  onJoin(client: Client, options: any) {
-    console.log(client.sessionId, "joined!");
+  private chooseTeam(): 0 | 1 {
+    let red = 0;
+    let blue = 0;
+    for (const [, player] of this.state.players) {
+      if (player.team === 0) { red += 1; } else { blue += 1; }
+    }
+    return red <= blue ? 0 : 1;
+  }
 
+  private spawnFor(slot: number, team: 0 | 1): { x: number; y: number } {
+    if (this.mode === "duel") {
+      const angle = -Math.PI / 2 + (slot % 8) * ((Math.PI * 2) / 8);
+      const radius = 130;
+      return {
+        x: clamp(ARENA_WIDTH / 2 + Math.cos(angle) * radius, PLAYER_HALF, ARENA_WIDTH - PLAYER_HALF),
+        y: clamp(ARENA_HEIGHT / 2 + Math.sin(angle) * radius, PLAYER_HALF, ARENA_HEIGHT - PLAYER_HALF),
+      };
+    }
+    if (this.mode === "siege") {
+      const side = team === 0 ? 1 : -1;
+      const lane = (slot % 8) - 3.5;
+      return {
+        x: clamp(ARENA_WIDTH / 2 + lane * 24, PLAYER_HALF, ARENA_WIDTH - PLAYER_HALF),
+        y: clamp(ARENA_HEIGHT / 2 + side * 150, PLAYER_HALF, ARENA_HEIGHT - PLAYER_HALF),
+      };
+    }
     // Everyone drops onto the southern approach, spread across a shallow arc.
     // The chase camera faces north, so the ruined plaza is in view from the
     // first frame and nobody spawns on top of anybody else.
-    const slot = this.joinCount++;
     const angle = Math.PI / 2 + ((slot % 9) - 4) * 0.11;
     const radius = 160 + Math.floor(slot / 9) * 34;
+    return {
+      x: clamp(ARENA_WIDTH / 2 + Math.cos(angle) * radius, PLAYER_HALF, ARENA_WIDTH - PLAYER_HALF),
+      y: clamp(ARENA_HEIGHT / 2 + Math.sin(angle) * radius, PLAYER_HALF, ARENA_HEIGHT - PLAYER_HALF),
+    };
+  }
+
+  onJoin(client: Client, options: any) {
+    console.log(client.sessionId, "joined!");
+
+    const slot = this.joinCount++;
+    const team = this.mode === "siege" ? this.chooseTeam() : 0;
+    const spawn = this.spawnFor(slot, team);
     const name = sanitizeName(options?.name) || `Wanderer ${slot + 1}`;
     const color = sanitizeColor(options?.color) ?? PLAYER_COLORS[slot % PLAYER_COLORS.length].value;
+
+    // A duelist who arrives after the round began sits out until the next one.
+    const waitingForDuel = this.mode === "duel"
+      && this.state.matchState !== MATCH_STATE.waiting;
+
     this.state.players.set(client.sessionId, new Player({
       name,
       color,
-      x: ARENA_WIDTH / 2 + Math.cos(angle) * radius,
-      y: ARENA_HEIGHT / 2 + Math.sin(angle) * radius,
+      x: spawn.x,
+      y: spawn.y,
       vx: 0,
       vy: 0,
-      health: MAX_HEALTH,
-      alive: true,
+      health: waitingForDuel ? 0 : MAX_HEALTH,
+      alive: !waitingForDuel,
       kills: 0,
       weapon: 2,
       comboStep: 0,
@@ -188,6 +258,12 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       rage: 0,
       raging: false,
       respawnTimer: 0,
+      team,
+      downed: false,
+      out: waitingForDuel,
+      reviveProgress: 0,
+      wins: 0,
+      revives: 0,
     }));
 
     // A solo player may have paused. A new arrival resumes the hunt.
@@ -197,6 +273,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
     this.attackCooldown.set(client.sessionId, 0);
     this.invulnerable.set(client.sessionId, 2);
+
+    // PvP modes begin as soon as two warriors share the arena.
+    if (!this.started && this.mode !== "coop" && this.state.players.size >= 2) {
+      this.startMatch();
+    }
   }
 
   onLeave(client: Client, code: CloseCode) {
@@ -206,6 +287,40 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.rageTimer.delete(client.sessionId);
     this.invulnerable.delete(client.sessionId);
     this.comboTimer.delete(client.sessionId);
+
+    if (this.state.players.size === 0) {
+      this.resetToWaiting();
+      return;
+    }
+
+    if (this.mode === "coop") {
+      this.checkCoopEnd();
+      return;
+    }
+
+    if (this.state.matchState !== MATCH_STATE.live) { return; }
+
+    if (this.mode === "duel") {
+      const alive: Player[] = [];
+      for (const [, player] of this.state.players) {
+        if (player.alive) { alive.push(player); }
+      }
+      if (alive.length <= 1) {
+        this.endDuelRound(alive[0] ?? null);
+      } else if (this.state.players.size < 2) {
+        this.resetToWaiting();
+      }
+      return;
+    }
+
+    // Siege: an empty tribe cannot hold the altar.
+    const red = this.countTeam(0);
+    const blue = this.countTeam(1);
+    if (red === 0) {
+      this.finishMatch(TEAM_NAMES[1], 1);
+    } else if (blue === 0) {
+      this.finishMatch(TEAM_NAMES[0], 0);
+    }
   }
 
   onDispose() {
@@ -230,12 +345,295 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   /** Hold → shrink → hold … until the phases run out, then hold forever. */
+  private resetStorm() {
+    const centre: Circle = {
+      x: ARENA_WIDTH / 2,
+      y: ARENA_HEIGHT / 2,
+      radius: STORM_START_RADIUS,
+    };
+    const first = this.stormPhases[0] ?? STORM_PHASES[0];
+
+    this.storm = {
+      mode: "hold",
+      phase: 0,
+      remaining: first.hold,
+      duration: first.hold,
+      from: centre,
+      to: centre,
+      dps: first.dps,
+    };
+
+    this.writeStormCircle(centre);
+    this.state.stormPhase = 0;
+    this.state.stormMode = STORM_MODE.hold;
+    this.state.stormTimer = first.hold;
+    this.state.stormDps = first.dps;
+  }
+
+  private countTeam(team: number): number {
+    let count = 0;
+    for (const [, player] of this.state.players) {
+      if (player.team === team) { count += 1; }
+    }
+    return count;
+  }
+
+  private findPlayerByName(name: string): Player | null {
+    if (!name) { return null; }
+    for (const [, player] of this.state.players) {
+      if (player.name === name) { return player; }
+    }
+    return null;
+  }
+
+  private clearEnemies() {
+    for (const id of this.state.enemies.keys()) {
+      this.state.enemies.delete(id);
+      this.enemyCooldown.delete(id);
+    }
+  }
+
+  private placePlayers(mode: GameMode) {
+    let index = 0;
+    for (const [sessionId, player] of this.state.players) {
+      const team = mode === "siege" ? (player.team as 0 | 1) : 0;
+      const spawn = this.spawnFor(index, team);
+      player.x = spawn.x;
+      player.y = spawn.y;
+      player.vx = 0;
+      player.vy = 0;
+      player.health = MAX_HEALTH;
+      player.alive = true;
+      player.downed = false;
+      player.out = false;
+      player.reviveProgress = 0;
+      player.respawnTimer = 0;
+      player.rage = 0;
+      player.raging = false;
+      player.comboStep = 0;
+      player.weapon = 2;
+      this.attackCooldown.set(sessionId, 0);
+      this.invulnerable.set(sessionId, 2);
+      this.rageTimer.delete(sessionId);
+      this.comboTimer.set(sessionId, 0);
+      index += 1;
+    }
+  }
+
+  private startMatch() {
+    if (this.started) { return; }
+    if (this.mode !== "coop" && this.state.players.size < 2) { return; }
+
+    this.started = true;
+    this.state.started = true;
+    this.state.paused = false;
+    this.state.matchState = MATCH_STATE.live;
+    this.state.round = 0;
+    this.state.roundTimer = 0;
+    this.state.scoreRed = 0;
+    this.state.scoreBlue = 0;
+    this.state.altar = 0;
+    this.altarCharge = 0;
+    this.state.winnerTeam = 255;
+    this.state.winnerName = "";
+    this.state.roundWinner = "";
+    this.state.pickupActive = false;
+    this.state.pickupTimer = 0;
+    this.state.wave = 0;
+    this.waveActive = false;
+
+    for (const [, player] of this.state.players) {
+      player.wins = 0;
+      player.kills = 0;
+      player.revives = 0;
+    }
+
+    if (this.mode === "coop") {
+      this.clearEnemies();
+      this.resetStorm();
+      this.placePlayers("coop");
+      this.state.waveTimer = 2.5;
+    } else if (this.mode === "duel") {
+      this.beginDuelRound();
+    } else {
+      this.beginSiegeRound();
+    }
+  }
+
+  private restartMatch() {
+    this.state.paused = false;
+    this.cinematicRemaining = 0;
+    this.state.wave = 0;
+    this.state.waveTimer = 3;
+    this.waveActive = false;
+    this.state.scoreRed = 0;
+    this.state.scoreBlue = 0;
+    this.state.round = 0;
+    this.state.roundTimer = 0;
+    this.state.altar = 0;
+    this.altarCharge = 0;
+    this.state.winnerTeam = 255;
+    this.state.winnerName = "";
+    this.state.roundWinner = "";
+    this.state.pickupActive = false;
+    this.state.pickupTimer = 0;
+    this.started = false;
+    this.state.started = false;
+    this.state.matchState = MATCH_STATE.waiting;
+    this.idleTime = 0;
+    this.clearEnemies();
+    this.resetStorm();
+
+    for (const [, player] of this.state.players) {
+      player.wins = 0;
+      player.kills = 0;
+      player.revives = 0;
+    }
+    this.placePlayers(this.mode);
+
+    if (this.mode === "coop" || this.state.players.size >= 2) {
+      this.startMatch();
+    }
+  }
+
+  private resetToWaiting() {
+    this.started = false;
+    this.state.started = false;
+    this.state.matchState = MATCH_STATE.waiting;
+    this.state.roundTimer = 0;
+    this.state.round = 0;
+    this.state.scoreRed = 0;
+    this.state.scoreBlue = 0;
+    this.state.altar = 0;
+    this.altarCharge = 0;
+    this.state.winnerTeam = 255;
+    this.state.winnerName = "";
+    this.state.roundWinner = "";
+    this.state.pickupActive = false;
+    this.state.pickupTimer = 0;
+    this.state.wave = 0;
+    this.state.waveTimer = 3;
+    this.waveActive = false;
+    this.clearEnemies();
+    this.resetStorm();
+    if (this.state.players.size > 0) {
+      this.placePlayers(this.mode);
+    }
+  }
+
+  private spawnPickup() {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 30 + Math.random() * 70;
+    this.state.pickupX = ARENA_WIDTH / 2 + Math.cos(angle) * distance;
+    this.state.pickupY = ARENA_HEIGHT / 2 + Math.sin(angle) * distance;
+    this.state.pickupActive = true;
+    this.state.pickupTimer = 0;
+  }
+
+  private beginDuelRound() {
+    this.state.round = Math.min(255, this.state.round + 1);
+    this.state.matchState = MATCH_STATE.live;
+    this.state.roundTimer = DUEL.roundSeconds;
+    this.state.roundWinner = "";
+    this.state.winnerName = "";
+    this.state.winnerTeam = 255;
+    this.state.wave = 0;
+    this.state.waveTimer = 0;
+    this.waveActive = false;
+    this.resetStorm();
+    this.clearEnemies();
+    this.spawnPickup();
+    this.placePlayers("duel");
+  }
+
+  private beginSiegeRound() {
+    this.state.round = Math.min(255, this.state.round + 1);
+    this.state.matchState = MATCH_STATE.live;
+    this.state.roundTimer = SIEGE.roundSeconds;
+    this.state.altar = 0;
+    this.altarCharge = 0;
+    this.state.roundWinner = "";
+    this.state.wave = 0;
+    this.state.waveTimer = 10;
+    this.waveActive = false;
+    this.resetStorm();
+    this.clearEnemies();
+    this.placePlayers("siege");
+  }
+
+  private endDuelRound(winner: Player | null) {
+    if (this.state.matchState !== MATCH_STATE.live) { return; }
+    if (winner) {
+      winner.wins = Math.min(255, winner.wins + 1);
+      this.state.roundWinner = winner.name;
+    } else {
+      this.state.roundWinner = "Draw";
+    }
+    this.state.matchState = MATCH_STATE.roundOver;
+    this.state.roundTimer = DUEL.resetDelay;
+  }
+
+  private endSiegeRound(team: number) {
+    if (this.state.matchState !== MATCH_STATE.live) { return; }
+    if (team === 0) {
+      this.state.scoreRed = Math.min(255, this.state.scoreRed + 1);
+      this.state.roundWinner = TEAM_NAMES[0];
+      this.state.winnerTeam = 0;
+    } else if (team === 1) {
+      this.state.scoreBlue = Math.min(255, this.state.scoreBlue + 1);
+      this.state.roundWinner = TEAM_NAMES[1];
+      this.state.winnerTeam = 1;
+    } else {
+      this.state.roundWinner = "Draw";
+      this.state.winnerTeam = 255;
+    }
+    this.state.matchState = MATCH_STATE.roundOver;
+    this.state.roundTimer = SIEGE.resetDelay;
+  }
+
+  private finishMatch(winnerName: string, winnerTeam: number) {
+    this.state.matchState = MATCH_STATE.matchOver;
+    this.state.winnerName = winnerName;
+    this.state.winnerTeam = winnerTeam;
+    this.state.roundTimer = 0;
+    this.matchOverTimer = 20;
+  }
+
+  private advanceRoundOver(dt: number) {
+    this.state.roundTimer = Math.max(0, this.state.roundTimer - dt);
+    if (this.state.roundTimer > 0) { return; }
+
+    if (this.mode === "duel") {
+      const winner = this.findPlayerByName(this.state.roundWinner);
+      if (winner && winner.wins >= DUEL.roundsToWin) {
+        this.finishMatch(winner.name, 255);
+      } else if (this.state.players.size >= 2) {
+        this.beginDuelRound();
+      } else {
+        this.resetToWaiting();
+      }
+      return;
+    }
+
+    if (this.mode === "siege") {
+      if (this.state.scoreRed >= SIEGE.capturesToWin) {
+        this.finishMatch(TEAM_NAMES[0], 0);
+      } else if (this.state.scoreBlue >= SIEGE.capturesToWin) {
+        this.finishMatch(TEAM_NAMES[1], 1);
+      } else if (this.state.players.size >= 2) {
+        this.beginSiegeRound();
+      } else {
+        this.resetToWaiting();
+      }
+    }
+  }
+
   private advanceStorm(dt: number) {
     const storm = this.storm;
     storm.remaining -= dt;
 
     if (storm.mode === "hold" && storm.remaining <= 0) {
-      const phase = STORM_PHASES[storm.phase];
+      const phase = this.stormPhases[storm.phase];
 
       if (phase) {
         storm.from = {
@@ -259,7 +657,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
         this.writeStormCircle(storm.to);
         storm.phase += 1;
 
-        const next = STORM_PHASES[storm.phase];
+        const next = this.stormPhases[storm.phase];
         if (next) {
           storm.mode = "hold";
           storm.remaining = next.hold;
@@ -303,7 +701,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     return best;
   }
 
-  private killPlayer(sessionId: string, player: Player) {
+  private stopPlayer(sessionId: string, player: Player) {
     player.alive = false;
     player.health = 0;
     player.vx = 0;
@@ -311,32 +709,216 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     player.raging = false;
     player.rage = 0;
     player.comboStep = 0;
-    player.respawnTimer = RESPAWN_SECONDS;
     this.rageTimer.delete(sessionId);
     this.comboTimer.delete(sessionId);
     this.invulnerable.set(sessionId, 1.5);
   }
 
+  /** Co-op solo and siege: the storm brings the warrior back after a delay. */
+  private killPlayer(sessionId: string, player: Player) {
+    this.stopPlayer(sessionId, player);
+    player.downed = false;
+    player.out = false;
+    player.reviveProgress = 0;
+    player.respawnTimer = RESPAWN_SECONDS;
+  }
+
+  /** Co-op with allies: stay down and let a friend pull you back up. */
+  private downPlayer(sessionId: string, player: Player) {
+    this.stopPlayer(sessionId, player);
+    player.downed = true;
+    player.out = false;
+    player.reviveProgress = 0;
+    player.respawnTimer = DOWNED.bleedoutSeconds;
+  }
+
+  /** Duel: no respawn inside a round. */
+  private defeatPlayer(sessionId: string, player: Player) {
+    this.stopPlayer(sessionId, player);
+    player.downed = false;
+    player.out = true;
+    player.reviveProgress = 0;
+    player.respawnTimer = 0;
+  }
+
+  private reviveDowned(sessionId: string, player: Player) {
+    player.health = DOWNED.reviveHealth;
+    player.alive = true;
+    player.downed = false;
+    player.out = false;
+    player.respawnTimer = 0;
+    player.reviveProgress = 0;
+    player.vx = 0;
+    player.vy = 0;
+    player.revives = Math.min(65535, player.revives + 1);
+    this.invulnerable.set(sessionId, 2.5);
+    this.attackCooldown.set(sessionId, 0);
+  }
+
+  private tickDowned(dt: number) {
+    if (this.mode !== "coop") { return; }
+
+    for (const [sessionId, player] of this.state.players) {
+      if (!player.downed) { continue; }
+
+      player.respawnTimer = Math.max(0, player.respawnTimer - dt);
+
+      let helpers = 0;
+      let helperId: string | null = null;
+      for (const [otherId, other] of this.state.players) {
+        if (otherId === sessionId || !other.alive) { continue; }
+        if (Math.hypot(other.x - player.x, other.y - player.y) <= DOWNED.reviveRadius) {
+          helpers += 1;
+          if (!helperId) { helperId = otherId; }
+        }
+      }
+
+      if (helpers > 0) {
+        const speed = 1 + (helpers - 1) * 0.5;
+        player.reviveProgress = Math.min(
+          1,
+          player.reviveProgress + (dt * speed) / DOWNED.reviveSeconds
+        );
+        if (player.reviveProgress >= 1) {
+          this.reviveDowned(sessionId, player);
+          if (helperId) {
+            const helper = this.state.players.get(helperId);
+            if (helper) {
+              helper.revives = Math.min(65535, helper.revives + 1);
+            }
+          }
+          continue;
+        }
+      } else {
+        player.reviveProgress = Math.max(0, player.reviveProgress - dt * 0.25);
+      }
+
+      if (player.respawnTimer <= 0 && player.downed) {
+        player.downed = false;
+        player.out = true;
+        player.reviveProgress = 0;
+      }
+    }
+
+    this.checkCoopEnd();
+  }
+
+  private checkCoopEnd() {
+    if (this.mode !== "coop" || !this.started) { return; }
+    if (this.state.players.size < 2 || this.state.matchState !== MATCH_STATE.live) { return; }
+
+    for (const [, player] of this.state.players) {
+      if (player.alive) { return; }
+    }
+    this.finishMatch("", 255);
+  }
+
+  private reviveOutPlayers() {
+    if (this.mode !== "coop") { return; }
+
+    let anyAlive = false;
+    for (const [, player] of this.state.players) {
+      if (player.alive) { anyAlive = true; break; }
+    }
+    if (!anyAlive) { return; }
+
+    for (const [sessionId, player] of this.state.players) {
+      if (player.alive || !player.out) { continue; }
+      player.x = clamp(
+        this.state.stormX + (Math.random() - 0.5) * 24,
+        PLAYER_HALF,
+        ARENA_WIDTH - PLAYER_HALF
+      );
+      player.y = clamp(
+        this.state.stormY + (Math.random() - 0.5) * 24,
+        PLAYER_HALF,
+        ARENA_HEIGHT - PLAYER_HALF
+      );
+      player.health = DOWNED.reviveHealth;
+      player.alive = true;
+      player.downed = false;
+      player.out = false;
+      player.respawnTimer = 0;
+      player.reviveProgress = 0;
+      this.invulnerable.set(sessionId, 2.5);
+      this.attackCooldown.set(sessionId, 0);
+    }
+  }
+
   private respawnPlayer(sessionId: string, player: Player) {
-    player.x = clamp(
-      this.state.stormX + (Math.random() - 0.5) * 24,
-      PLAYER_HALF,
-      ARENA_WIDTH - PLAYER_HALF
-    );
-    player.y = clamp(
-      this.state.stormY + (Math.random() - 0.5) * 24,
-      PLAYER_HALF,
-      ARENA_HEIGHT - PLAYER_HALF
-    );
+    if (this.mode === "siege") {
+      const spawn = this.spawnFor(
+        Math.abs(Math.floor(Math.random() * 8)),
+        (player.team as 0 | 1)
+      );
+      player.x = spawn.x;
+      player.y = spawn.y;
+    } else {
+      player.x = clamp(
+        this.state.stormX + (Math.random() - 0.5) * 24,
+        PLAYER_HALF,
+        ARENA_WIDTH - PLAYER_HALF
+      );
+      player.y = clamp(
+        this.state.stormY + (Math.random() - 0.5) * 24,
+        PLAYER_HALF,
+        ARENA_HEIGHT - PLAYER_HALF
+      );
+    }
     player.health = MAX_HEALTH;
     player.alive = true;
+    player.downed = false;
+    player.out = false;
     player.respawnTimer = 0;
+    player.reviveProgress = 0;
     player.vx = 0;
     player.vy = 0;
     this.invulnerable.set(sessionId, 2.5);
     this.attackCooldown.set(sessionId, 0);
     player.comboStep = 0;
     this.comboTimer.set(sessionId, 0);
+  }
+
+  private canHarmPlayer(attacker: Player, target: Player): boolean {
+    if (attacker === target || !target.alive || target.downed) { return false; }
+    const targetId = this.playerId(target);
+    if (targetId && (this.invulnerable.get(targetId) ?? 0) > 0) { return false; }
+    if (this.mode === "duel") { return true; }
+    if (this.mode === "siege") { return attacker.team !== target.team; }
+    return false;
+  }
+
+  /**
+   * PvP damage. Returns true when the target fell, so the caller can award
+   * the kill and rage.
+   */
+  private damagePlayer(
+    attacker: Player,
+    targetId: string,
+    target: Player,
+    amount: number,
+    knockback: number
+  ): boolean {
+    target.health = Math.max(0, target.health - amount);
+    if (!target.raging) {
+      target.rage = Math.min(PLAYER_RAGE.max, target.rage + Math.min(12, amount * 0.15));
+    }
+
+    const dx = target.x - attacker.x;
+    const dy = target.y - attacker.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    target.x = clamp(target.x + (dx / distance) * knockback, PLAYER_HALF, ARENA_WIDTH - PLAYER_HALF);
+    target.y = clamp(target.y + (dy / distance) * knockback, PLAYER_HALF, ARENA_HEIGHT - PLAYER_HALF);
+
+    if (target.health <= 0) {
+      if (this.mode === "duel") {
+        this.defeatPlayer(targetId, target);
+      } else {
+        this.killPlayer(targetId, target);
+      }
+      return true;
+    }
+    return false;
   }
 
   private handleAttack(sessionId: string, player: Player) {
@@ -367,62 +949,118 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private throwChainBlades(sessionId: string, player: Player): boolean {
-    let target: Enemy | null = null;
+    type ChainTarget =
+      | { type: "enemy"; enemy: Enemy }
+      | { type: "player"; id: string; target: Player };
+
+    let primary: ChainTarget | null = null;
     let bestDistance: number = CHAIN_COMBO.range;
 
-    for (const [, enemy] of this.state.enemies) {
-      if (!enemy.alive) { continue; }
-      const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
-      if (distance <= bestDistance) {
-        bestDistance = distance;
-        target = enemy;
+    if (this.mode !== "duel") {
+      for (const [, enemy] of this.state.enemies) {
+        if (!enemy.alive) { continue; }
+        const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+        if (distance <= bestDistance) {
+          bestDistance = distance;
+          primary = { type: "enemy", enemy };
+        }
       }
     }
 
-    if (!target) {
+    if (this.mode !== "coop") {
+      for (const [id, other] of this.state.players) {
+        if (!this.canHarmPlayer(player, other)) { continue; }
+        const distance = Math.hypot(other.x - player.x, other.y - player.y);
+        if (distance <= bestDistance) {
+          bestDistance = distance;
+          primary = { type: "player", id, target: other };
+        }
+      }
+    }
+
+    if (!primary) {
       return false;
     }
 
     const multiplier = player.raging ? PLAYER_ATTACK.rageDamage : 1;
-    const impactX = target.x;
-    const impactY = target.y;
-    const kind = ENEMY_KINDS[target.kind] ?? "draugr";
-    const stats = ENEMY_STATS[kind];
+    const impactX = primary.type === "enemy" ? primary.enemy.x : primary.target.x;
+    const impactY = primary.type === "enemy" ? primary.enemy.y : primary.target.y;
 
-    target.health = Math.max(0, target.health - CHAIN_COMBO.damage * multiplier);
-    target.hitFlash = 1;
-
-    const dx = target.x - player.x;
-    const dy = target.y - player.y;
-    const distance = Math.hypot(dx, dy) || 1;
-    target.x = clamp(target.x + (dx / distance) * CHAIN_COMBO.knockback, 12, ARENA_WIDTH - 12);
-    target.y = clamp(target.y + (dy / distance) * CHAIN_COMBO.knockback, 12, ARENA_HEIGHT - 12);
-
-    if (target.health <= 0) {
-      target.alive = false;
-      target.vx = 0;
-      target.vy = 0;
-      player.kills = Math.min(65535, player.kills + 1);
-      player.rage = Math.min(PLAYER_RAGE.max, player.rage + stats.rage);
-    } else {
-      player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
-    }
-
-    // The returning blades lash everything around the impact point.
-    for (const [, enemy] of this.state.enemies) {
-      if (!enemy.alive || enemy === target) { continue; }
-      if (Math.hypot(enemy.x - impactX, enemy.y - impactY) > CHAIN_COMBO.splashRadius) {
-        continue;
-      }
-      enemy.health = Math.max(0, enemy.health - CHAIN_COMBO.splashDamage * multiplier);
+    if (primary.type === "enemy") {
+      const enemy = primary.enemy;
+      const kind = ENEMY_KINDS[enemy.kind] ?? "draugr";
+      const stats = ENEMY_STATS[kind];
+      enemy.health = Math.max(0, enemy.health - CHAIN_COMBO.damage * multiplier);
       enemy.hitFlash = 1;
+
+      const dx = enemy.x - player.x;
+      const dy = enemy.y - player.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      enemy.x = clamp(enemy.x + (dx / distance) * CHAIN_COMBO.knockback, 12, ARENA_WIDTH - 12);
+      enemy.y = clamp(enemy.y + (dy / distance) * CHAIN_COMBO.knockback, 12, ARENA_HEIGHT - 12);
+
       if (enemy.health <= 0) {
-        const splashKind = ENEMY_KINDS[enemy.kind] ?? "draugr";
         enemy.alive = false;
         enemy.vx = 0;
         enemy.vy = 0;
         player.kills = Math.min(65535, player.kills + 1);
-        player.rage = Math.min(PLAYER_RAGE.max, player.rage + ENEMY_STATS[splashKind].rage);
+        player.rage = Math.min(PLAYER_RAGE.max, player.rage + stats.rage);
+      } else {
+        player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
+      }
+    } else {
+      const fell = this.damagePlayer(
+        player,
+        primary.id,
+        primary.target,
+        CHAIN_COMBO.damage * multiplier,
+        CHAIN_COMBO.knockback
+      );
+      player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
+      if (fell) {
+        player.kills = Math.min(65535, player.kills + 1);
+        player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
+      }
+    }
+
+    // The returning blades lash everything around the impact point.
+    if (this.mode !== "duel") {
+      for (const [, enemy] of this.state.enemies) {
+        if (!enemy.alive || (primary.type === "enemy" && enemy === primary.enemy)) { continue; }
+        if (Math.hypot(enemy.x - impactX, enemy.y - impactY) > CHAIN_COMBO.splashRadius) {
+          continue;
+        }
+        enemy.health = Math.max(0, enemy.health - CHAIN_COMBO.splashDamage * multiplier);
+        enemy.hitFlash = 1;
+        if (enemy.health <= 0) {
+          const splashKind = ENEMY_KINDS[enemy.kind] ?? "draugr";
+          enemy.alive = false;
+          enemy.vx = 0;
+          enemy.vy = 0;
+          player.kills = Math.min(65535, player.kills + 1);
+          player.rage = Math.min(PLAYER_RAGE.max, player.rage + ENEMY_STATS[splashKind].rage);
+        }
+      }
+    }
+
+    if (this.mode !== "coop") {
+      for (const [id, other] of this.state.players) {
+        if (!this.canHarmPlayer(player, other)) { continue; }
+        if (primary.type === "player" && id === primary.id) { continue; }
+        if (Math.hypot(other.x - impactX, other.y - impactY) > CHAIN_COMBO.splashRadius) {
+          continue;
+        }
+        const fell = this.damagePlayer(
+          player,
+          id,
+          other,
+          CHAIN_COMBO.splashDamage * multiplier,
+          CHAIN_COMBO.knockback * 0.6
+        );
+        if (fell) {
+          player.kills = Math.min(65535, player.kills + 1);
+          player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
+        }
       }
     }
 
@@ -443,16 +1081,43 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     const damage = weapon.damage * multiplier;
     let connected = false;
 
-    const inRange: Array<{ enemy: Enemy; distance: number; dx: number; dy: number }> = [];
-    for (const [, enemy] of this.state.enemies) {
-      if (!enemy.alive) { continue; }
-      const kind = ENEMY_KINDS[enemy.kind] ?? "draugr";
-      const stats = ENEMY_STATS[kind];
-      const dx = enemy.x - player.x;
-      const dy = enemy.y - player.y;
-      const distance = Math.hypot(dx, dy);
-      if (distance <= weapon.range + stats.radius) {
-        inRange.push({ enemy, distance, dx, dy });
+    type SwingTarget =
+      | { type: "enemy"; enemy: Enemy; distance: number; dx: number; dy: number; radius: number }
+      | { type: "player"; id: string; target: Player; distance: number; dx: number; dy: number; radius: number };
+
+    const inRange: SwingTarget[] = [];
+
+    if (this.mode !== "duel") {
+      for (const [, enemy] of this.state.enemies) {
+        if (!enemy.alive) { continue; }
+        const kind = ENEMY_KINDS[enemy.kind] ?? "draugr";
+        const stats = ENEMY_STATS[kind];
+        const dx = enemy.x - player.x;
+        const dy = enemy.y - player.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= weapon.range + stats.radius) {
+          inRange.push({ type: "enemy", enemy, distance, dx, dy, radius: stats.radius });
+        }
+      }
+    }
+
+    if (this.mode !== "coop") {
+      for (const [id, other] of this.state.players) {
+        if (!this.canHarmPlayer(player, other)) { continue; }
+        const dx = other.x - player.x;
+        const dy = other.y - player.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= weapon.range + PLAYER_HALF) {
+          inRange.push({
+            type: "player",
+            id,
+            target: other,
+            distance,
+            dx,
+            dy,
+            radius: PLAYER_HALF,
+          });
+        }
       }
     }
 
@@ -461,33 +1126,57 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       : inRange.sort((a, b) => a.distance - b.distance).slice(0, 1);
 
     for (const target of targets) {
-      const enemy = target.enemy;
-      const kind = ENEMY_KINDS[enemy.kind] ?? "draugr";
-      const stats = ENEMY_STATS[kind];
       connected = true;
-      enemy.health = Math.max(0, enemy.health - damage);
-      enemy.hitFlash = 1;
 
-      const nx = target.distance > 0.001 ? target.dx / target.distance : 1;
-      const ny = target.distance > 0.001 ? target.dy / target.distance : 0;
-      enemy.x = clamp(enemy.x + nx * PLAYER_ATTACK.knockback, 12, ARENA_WIDTH - 12);
-      enemy.y = clamp(enemy.y + ny * PLAYER_ATTACK.knockback, 12, ARENA_HEIGHT - 12);
+      if (target.type === "enemy") {
+        const enemy = target.enemy;
+        const kind = ENEMY_KINDS[enemy.kind] ?? "draugr";
+        const stats = ENEMY_STATS[kind];
+        enemy.health = Math.max(0, enemy.health - damage);
+        enemy.hitFlash = 1;
+
+        const nx = target.distance > 0.001 ? target.dx / target.distance : 1;
+        const ny = target.distance > 0.001 ? target.dy / target.distance : 0;
+        enemy.x = clamp(enemy.x + nx * PLAYER_ATTACK.knockback, 12, ARENA_WIDTH - 12);
+        enemy.y = clamp(enemy.y + ny * PLAYER_ATTACK.knockback, 12, ARENA_HEIGHT - 12);
+
+        if (weapon.healOnHit > 0) {
+          player.health = Math.min(MAX_HEALTH, player.health + weapon.healOnHit);
+        }
+
+        if (enemy.health <= 0) {
+          enemy.alive = false;
+          enemy.vx = 0;
+          enemy.vy = 0;
+          player.kills = Math.min(65535, player.kills + 1);
+          player.rage = Math.min(PLAYER_RAGE.max, player.rage + stats.rage + weapon.ragePerHit);
+          if (weapon.healOnKill > 0) {
+            player.health = Math.min(MAX_HEALTH, player.health + weapon.healOnKill);
+          }
+        } else {
+          player.rage = Math.min(PLAYER_RAGE.max, player.rage + weapon.ragePerHit);
+        }
+        continue;
+      }
+
+      const fell = this.damagePlayer(
+        player,
+        target.id,
+        target.target,
+        damage,
+        PLAYER_ATTACK.knockback
+      );
 
       if (weapon.healOnHit > 0) {
         player.health = Math.min(MAX_HEALTH, player.health + weapon.healOnHit);
       }
-
-      if (enemy.health <= 0) {
-        enemy.alive = false;
-        enemy.vx = 0;
-        enemy.vy = 0;
+      player.rage = Math.min(PLAYER_RAGE.max, player.rage + weapon.ragePerHit);
+      if (fell) {
         player.kills = Math.min(65535, player.kills + 1);
-        player.rage = Math.min(PLAYER_RAGE.max, player.rage + stats.rage + weapon.ragePerHit);
+        player.rage = Math.min(PLAYER_RAGE.max, player.rage + 20);
         if (weapon.healOnKill > 0) {
           player.health = Math.min(MAX_HEALTH, player.health + weapon.healOnKill);
         }
-      } else {
-        player.rage = Math.min(PLAYER_RAGE.max, player.rage + weapon.ragePerHit);
       }
     }
 
@@ -507,24 +1196,38 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   // ------------------------------------------------------------------- waves
 
   private waveComposition(wave: number): EnemyKind[] {
+    // More warriors means more foes. The hunt should not get easier in a group.
+    const extra = Math.min(8, Math.max(0, this.state.players.size - 1) * 2);
+
     if (wave % 5 === 0) {
-      const draugr = Math.min(6, 2 + Math.floor(wave / 5));
+      const draugr = Math.min(9, 2 + Math.floor(wave / 5) + Math.ceil(extra / 2));
       return ["colossus", ...Array<EnemyKind>(draugr).fill("draugr")];
     }
     const list: EnemyKind[] = [];
-    const draugr = Math.min(8, 3 + Math.floor(wave / 2));
+    const draugr = Math.min(14, 3 + Math.floor(wave / 2) + extra);
     for (let i = 0; i < draugr; i++) { list.push("draugr"); }
     if (wave >= 2) { list.push("troll"); }
     if (wave >= 3) { list.push("god"); }
     if (wave >= 6) { list.push("god"); }
     if (wave >= 8) { list.push("troll"); }
+    if (this.state.players.size >= 4 && wave >= 4) { list.push("troll"); }
+    return list;
+  }
+
+  /** Siege waves are small interference packs, not the main objective. */
+  private siegeComposition(wave: number): EnemyKind[] {
+    const list: EnemyKind[] = ["draugr", "draugr"];
+    if (this.state.players.size >= 3) { list.push("draugr"); }
+    if (wave % 3 === 0) { list.push("troll"); }
+    if (wave % 5 === 0) { list.push("god"); }
     return list;
   }
 
   private spawnEnemy(kind: EnemyKind, wave: number) {
     const stats = ENEMY_STATS[kind];
     const scale = 1 + Math.max(0, wave - 1) * 0.09;
-    const health = Math.round(stats.health * scale);
+    const groupScale = 1 + Math.max(0, this.state.players.size - 1) * 0.4;
+    const health = Math.round(stats.health * scale * groupScale);
 
     const players: Player[] = [];
     for (const [, player] of this.state.players) {
@@ -568,6 +1271,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private startWave() {
+    if (this.mode === "duel") { return; }
+
     // Clear the previous wave's dead so the schema map never grows forever.
     for (const [id, enemy] of this.state.enemies) {
       if (!enemy.alive) {
@@ -580,14 +1285,16 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.waveActive = true;
     this.state.waveTimer = 0;
 
-    const composition = this.waveComposition(this.state.wave);
+    const composition = this.mode === "siege"
+      ? this.siegeComposition(this.state.wave)
+      : this.waveComposition(this.state.wave);
     for (const kind of composition) {
       this.spawnEnemy(kind, this.state.wave);
     }
   }
 
   private tickWaves(dt: number) {
-    if (!this.started) {
+    if (!this.started || this.mode === "duel") {
       return;
     }
     if (this.state.waveTimer > 0) {
@@ -608,7 +1315,104 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     }
     if (living === 0) {
       this.waveActive = false;
-      this.state.waveTimer = 4.5;
+      this.state.waveTimer = this.mode === "siege" ? 12 : 4.5;
+      if (this.mode === "coop") {
+        this.reviveOutPlayers();
+      }
+    }
+  }
+
+  private tickDuel(dt: number) {
+    if (this.mode !== "duel" || this.state.matchState !== MATCH_STATE.live) { return; }
+
+    this.state.roundTimer = Math.max(0, this.state.roundTimer - dt);
+
+    let alive: Player | null = null;
+    let aliveCount = 0;
+    for (const [, player] of this.state.players) {
+      if (!player.alive) { continue; }
+      aliveCount += 1;
+      alive = player;
+    }
+
+    if (aliveCount <= 1) {
+      this.endDuelRound(alive);
+      return;
+    }
+
+    if (this.state.pickupActive) {
+      for (const [, player] of this.state.players) {
+        if (!player.alive) { continue; }
+        if (Math.hypot(player.x - this.state.pickupX, player.y - this.state.pickupY) > DUEL.pickupRadius) {
+          continue;
+        }
+        player.health = Math.min(MAX_HEALTH, player.health + DUEL.pickupHeal);
+        this.state.pickupActive = false;
+        this.state.pickupTimer = DUEL.pickupRespawn;
+        break;
+      }
+    } else {
+      this.state.pickupTimer = Math.max(0, this.state.pickupTimer - dt);
+      if (this.state.pickupTimer <= 0) {
+        this.spawnPickup();
+      }
+    }
+
+    if (this.state.roundTimer <= 0) {
+      // Time is up. The healthiest warrior takes the round.
+      let best: Player | null = null;
+      for (const [, player] of this.state.players) {
+        if (!player.alive) { continue; }
+        if (!best || player.health > best.health) { best = player; }
+      }
+      this.endDuelRound(best);
+    }
+  }
+
+  private tickSiege(dt: number) {
+    if (this.mode !== "siege" || this.state.matchState !== MATCH_STATE.live) { return; }
+
+    this.state.roundTimer = Math.max(0, this.state.roundTimer - dt);
+
+    let red = 0;
+    let blue = 0;
+    const centreX = ARENA_WIDTH / 2;
+    const centreY = ARENA_HEIGHT / 2;
+    for (const [, player] of this.state.players) {
+      if (!player.alive) { continue; }
+      if (Math.hypot(player.x - centreX, player.y - centreY) > SIEGE.altarRadius) {
+        continue;
+      }
+      if (player.team === 0) { red += 1; } else { blue += 1; }
+    }
+
+    if (red > 0 && blue === 0) {
+      this.altarCharge += SIEGE.chargePerSecond * dt;
+    } else if (blue > 0 && red === 0) {
+      this.altarCharge -= SIEGE.chargePerSecond * dt;
+    } else {
+      const decay = SIEGE.decayPerSecond * dt;
+      if (this.altarCharge > 0) {
+        this.altarCharge = Math.max(0, this.altarCharge - decay);
+      } else if (this.altarCharge < 0) {
+        this.altarCharge = Math.min(0, this.altarCharge + decay);
+      }
+    }
+
+    this.altarCharge = clamp(this.altarCharge, -100, 100);
+    this.state.altar = Math.round(this.altarCharge * 10) / 10;
+
+    if (this.altarCharge >= 100) {
+      this.endSiegeRound(0);
+      return;
+    }
+    if (this.altarCharge <= -100) {
+      this.endSiegeRound(1);
+      return;
+    }
+
+    if (this.state.roundTimer <= 0) {
+      this.endSiegeRound(Math.abs(this.altarCharge) < 2 ? -1 : this.altarCharge > 0 ? 0 : 1);
     }
   }
 
@@ -650,10 +1454,17 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
             : false;
 
           if (!shielded) {
-            target.health = Math.max(0, target.health - stats.damage);
+            const damageScale = 1 + Math.max(0, this.state.players.size - 1) * 0.12;
+            target.health = Math.max(0, target.health - stats.damage * damageScale);
             if (target.health <= 0) {
               const sessionId = this.playerId(target);
-              if (sessionId) { this.killPlayer(sessionId, target); }
+              if (sessionId) {
+                if (this.mode === "coop" && this.state.players.size > 1) {
+                  this.downPlayer(sessionId, target);
+                } else {
+                  this.killPlayer(sessionId, target);
+                }
+              }
             }
           }
           this.enemyCooldown.set(id, stats.cooldown);
@@ -690,6 +1501,19 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       return;
     }
 
+    if (this.state.matchState === MATCH_STATE.matchOver) {
+      this.matchOverTimer = Math.max(0, this.matchOverTimer - dt);
+      if (this.matchOverTimer <= 0) {
+        this.restartMatch();
+      }
+      return;
+    }
+
+    if (this.state.matchState === MATCH_STATE.roundOver) {
+      this.advanceRoundOver(dt);
+      return;
+    }
+
     // The briefing holds the hunt. Movement still works so a client can walk
     // around the drop zone; the storm, waves and enemies wait for "ready".
     if (!this.started) {
@@ -702,10 +1526,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
           stepEntity(player, input, dt);
         }
       }
-      if (this.idleTime >= 20) {
-        this.started = true;
-        this.state.started = true;
-        this.state.waveTimer = 2.5;
+      if (this.mode === "coop" && this.idleTime >= 20) {
+        this.startMatch();
       }
       return;
     }
@@ -722,10 +1544,23 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       const invulnerable = Math.max(0, (this.invulnerable.get(sessionId) ?? 0) - dt);
       this.invulnerable.set(sessionId, invulnerable);
 
+      if (player.downed) {
+        continue;
+      }
+
       if (!player.alive) {
-        player.respawnTimer = Math.max(0, player.respawnTimer - dt);
-        if (player.respawnTimer <= 0) {
-          this.respawnPlayer(sessionId, player);
+        // Solo co-op keeps the old six second return. A multiplayer co-op
+        // warrior is out until the wave is cleared.
+        if (this.mode === "coop" && this.state.players.size === 1) {
+          player.respawnTimer = Math.max(0, player.respawnTimer - dt);
+          if (player.respawnTimer <= 0) {
+            this.respawnPlayer(sessionId, player);
+          }
+        } else if (this.mode === "siege") {
+          player.respawnTimer = Math.max(0, player.respawnTimer - dt);
+          if (player.respawnTimer <= 0) {
+            this.respawnPlayer(sessionId, player);
+          }
         }
         continue;
       }
@@ -773,12 +1608,33 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       if (damage > 0) {
         player.health = applyDamage(player.health, damage);
         if (player.health <= 0) {
-          this.killPlayer(sessionId, player);
+          if (this.mode === "duel") {
+            this.defeatPlayer(sessionId, player);
+          } else if (this.mode === "coop" && this.state.players.size > 1) {
+            this.downPlayer(sessionId, player);
+          } else {
+            this.killPlayer(sessionId, player);
+          }
         }
       }
     }
 
-    this.tickEnemies(dt);
-    this.tickWaves(dt);
+    if (this.mode === "coop") {
+      this.tickDowned(dt);
+      if (this.state.matchState !== MATCH_STATE.live) { return; }
+      this.tickEnemies(dt);
+      this.tickWaves(dt);
+      this.checkCoopEnd();
+      return;
+    }
+
+    if (this.mode === "siege") {
+      this.tickEnemies(dt);
+      this.tickWaves(dt);
+      this.tickSiege(dt);
+      return;
+    }
+
+    this.tickDuel(dt);
   }
 }

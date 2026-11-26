@@ -88,6 +88,40 @@ export const CHAIN_COMBO = {
 
 export const RESPAWN_SECONDS = 6;
 
+/** Match flow wire codes. Co-op jumps straight from waiting to live. */
+export const MATCH_STATE = {
+  waiting: 0,
+  live: 1,
+  roundOver: 2,
+  matchOver: 3,
+} as const;
+
+/** Co-op downed state. Allies standing close fill the revive meter. */
+export const DOWNED = {
+  bleedoutSeconds: 20,
+  reviveSeconds: 3,
+  reviveRadius: 26,
+  reviveHealth: 50,
+} as const;
+
+export const DUEL = {
+  roundSeconds: 90,
+  roundsToWin: 3,
+  resetDelay: 4.5,
+  pickupHeal: 35,
+  pickupRespawn: 15,
+  pickupRadius: 20,
+} as const;
+
+export const SIEGE = {
+  roundSeconds: 120,
+  capturesToWin: 3,
+  resetDelay: 4.5,
+  altarRadius: 70,
+  chargePerSecond: 7,
+  decayPerSecond: 4,
+} as const;
+
 export const MoveInput = schema({
   moveX: t.int8<-1 | 0 | 1>(),
   moveY: t.int8<-1 | 0 | 1>(),
@@ -127,6 +161,18 @@ export const Player = schema({
   raging: t.boolean(),
   /** Seconds left before the storm gives the player back. */
   respawnTimer: t.number(),
+  /** 0 = Red, 1 = Blue. Ignored outside Altar Siege. */
+  team: t.uint8(),
+  /** Co-op only: health reached zero and an ally may revive this warrior. */
+  downed: t.boolean(),
+  /** Co-op only: the bleedout finished. Returns when the wave is cleared. */
+  out: t.boolean(),
+  /** 0..1 fill of the current revive attempt. */
+  reviveProgress: t.number(),
+  /** Duel rounds won. */
+  wins: t.uint8(),
+  /** How many downed allies this warrior has pulled back up. */
+  revives: t.uint16(),
 });
 export type Player = SchemaType<typeof Player>;
 
@@ -153,6 +199,32 @@ export type Enemy = SchemaType<typeof Enemy>;
 export const ArenaState = schema({
   players: t.map(Player),
   enemies: t.map(Enemy),
+
+  /** 0 = Storm Co-op, 1 = Storm Duel, 2 = Altar Siege. */
+  mode: t.uint8(),
+  /** See MATCH_STATE. */
+  matchState: t.uint8(),
+  /** Round number in duel and siege. */
+  round: t.uint8(),
+  /** Seconds left in a duel or siege round. */
+  roundTimer: t.number(),
+  /** Altar Siege captures. */
+  scoreRed: t.uint8(),
+  scoreBlue: t.uint8(),
+  /** Signed altar charge, -100 (Blue) .. +100 (Red). */
+  altar: t.number(),
+  /** 0 = Red, 1 = Blue, 255 = none. */
+  winnerTeam: t.uint8(),
+  /** Winner of the whole match, or an empty string. */
+  winnerName: t.string(),
+  /** Winner of the round just played. */
+  roundWinner: t.string(),
+
+  /** Duel health rune. It always rises near the contested centre. */
+  pickupX: t.number(),
+  pickupY: t.number(),
+  pickupActive: t.boolean(),
+  pickupTimer: t.number(),
 
   /** False until a player opens the hunt. The storm and waves hold. */
   started: t.boolean(),
