@@ -92,6 +92,11 @@ the runtime `PORT` that Render assigns, so do not start
 4. Copy the service URL, for example `https://gor-arena.onrender.com`.
 5. In Vercel, add `VITE_SERVER_URL` with that URL and redeploy.
 
+The repo `.env` already points at `https://gor-arena.onrender.com` for the
+production client build. A Vercel environment variable with the same name
+overrides it, so make sure it matches if you set one. Local development uses
+`.env.development`, which keeps the client on the local server.
+
 Render free instances sleep when idle, so the first connection can take about
 30 seconds. Retry once if the arena does not answer immediately.
 
