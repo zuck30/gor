@@ -26,7 +26,7 @@ npm install
 npm start
 ```
 
-Open <http://localhost:2567>. Open a second tab to see another player. Rooms, playground and monitor are all on the same port in development.
+Open the URL Vite prints (usually <http://localhost:5173>). Open a second tab to see another player. The Colyseus rooms, `/playground` and `/monitor` share that port in development.
 
 ```bash
 npm test        # boots a real server, connects a real client
