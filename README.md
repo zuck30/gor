@@ -1,24 +1,28 @@
 # The God of Rage
 
-Mwanafyale, the God of Rage. A browser action game on a storm-wracked island.
-Fight waves of draugr, trolls, gods, and colossi while the storm closes in.
+You are Mwanafyale.
+You are very strong.
+Bad monsters come. Hit them.
+The storm comes too. Stay inside the ring.
 
-**Controls**
+**How to play**
 
 <div align="center">
 
-| Action | Input |
+| Do this | Press |
 |---|---|
-| Move | `W` `A` `S` `D` |
-| Attack | Left mouse / `Space` |
-| Swap weapon | `E` |
+| Walk | `W` `A` `S` `D` |
+| Hit | Left mouse / `Space` |
+| Change weapon | `E` |
 | Rage | `Q` |
-| Pause | `P` |
-| Rules | `H` |
+| Stop | `P` |
+| Help | `H` |
 
 </div>
 
-Three chain-blade swings in a row hurl both blades at the nearest enemy.
+Hit three times with the chain.
+Whoosh. The chain flies out.
+It hits very hard. Then it comes back.
 
 **License**
 
