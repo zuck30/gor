@@ -15,6 +15,11 @@ import {
 } from "./schema/ArenaState.js";
 import { stepEntity } from "../shared/movement.js";
 import {
+  PLAYER_COLORS,
+  sanitizeColor,
+  sanitizeName,
+} from "../shared/profile.js";
+import {
   TICK_RATE,
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -163,7 +168,11 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     const slot = this.joinCount++;
     const angle = Math.PI / 2 + ((slot % 9) - 4) * 0.11;
     const radius = 160 + Math.floor(slot / 9) * 34;
+    const name = sanitizeName(options?.name) || `Wanderer ${slot + 1}`;
+    const color = sanitizeColor(options?.color) ?? PLAYER_COLORS[slot % PLAYER_COLORS.length].value;
     this.state.players.set(client.sessionId, new Player({
+      name,
+      color,
       x: ARENA_WIDTH / 2 + Math.cos(angle) * radius,
       y: ARENA_HEIGHT / 2 + Math.sin(angle) * radius,
       vx: 0,

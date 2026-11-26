@@ -12,11 +12,7 @@ const outlineMaterial = new THREE.MeshBasicMaterial({
 const skinMaterial = new THREE.MeshToonMaterial({ color: 0x6e4630, gradientMap: toonGradient });
 const leatherMaterial = new THREE.MeshToonMaterial({ color: 0x2b211d, gradientMap: toonGradient });
 const pantsMaterial = new THREE.MeshToonMaterial({ color: 0x1c2028, gradientMap: toonGradient });
-const blueClothMaterial = new THREE.MeshToonMaterial({
-  color: 0x1d2f4d,
-  gradientMap: toonGradient,
-  side: THREE.DoubleSide,
-});
+const RAGE_RING = new THREE.Color(0xff4a2a);
 const silverMaterial = new THREE.MeshStandardMaterial({
   color: 0xc4ccd5,
   metalness: 0.88,
@@ -348,8 +344,15 @@ export function createCharacter(options: {
   isSelf: boolean;
   sessionId: string;
   label: string;
+  color: string;
 }): CharacterRig {
-  const { isSelf, sessionId, label } = options;
+  const { isSelf, sessionId, label, color } = options;
+  const chosenColor = new THREE.Color(color || "#1d2f4d");
+  const clothMaterial = new THREE.MeshToonMaterial({
+    color: chosenColor,
+    gradientMap: toonGradient,
+    side: THREE.DoubleSide,
+  });
   const root = new THREE.Group();
 
   const shadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
@@ -362,7 +365,7 @@ export function createCharacter(options: {
     selfRing = new THREE.Mesh(
       ringGeometry,
       new THREE.MeshBasicMaterial({
-        color: 0xffc45e,
+        color: chosenColor,
         transparent: true,
         opacity: 0.55,
         blending: THREE.AdditiveBlending,
@@ -429,7 +432,7 @@ export function createCharacter(options: {
 
   const kilt = new THREE.Mesh(
     new THREE.CylinderGeometry(0.95, 1.15, 1.35, 10, 1, true),
-    blueClothMaterial
+    clothMaterial
   );
   kilt.position.y = -0.12;
   kilt.castShadow = true;
@@ -438,7 +441,7 @@ export function createCharacter(options: {
   // Tattered storm-blue strips hanging from the belt.
   for (let i = 0; i < 7; i++) {
     const angle = (i / 7) * Math.PI * 2 + 0.2;
-    const strip = new THREE.Mesh(clothStripGeometry, blueClothMaterial);
+    const strip = new THREE.Mesh(clothStripGeometry, clothMaterial);
     strip.position.set(
       Math.cos(angle) * 0.92,
       0.05 - (i % 3) * 0.18,
@@ -793,7 +796,7 @@ export function createCharacter(options: {
       if (selfRing) {
         selfRing.rotation.z += dt * 0.6;
         selfRing.scale.setScalar(1 + Math.sin(elapsed * 2.4) * 0.06);
-        (selfRing.material as THREE.MeshBasicMaterial).color.setHex(raging ? 0xff4a2a : 0xffc45e);
+        (selfRing.material as THREE.MeshBasicMaterial).color.copy(raging ? RAGE_RING : chosenColor);
       }
 
       shadow.position.y = 0.035 - bounce;

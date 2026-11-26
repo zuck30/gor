@@ -235,6 +235,103 @@
         cursor: pointer;
       }
 
+      #profile-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 70;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background:
+          radial-gradient(circle at 50% 35%, rgba(38, 58, 46, 0.98), rgba(4, 6, 5, 0.99) 72%);
+      }
+      #profile-screen.is-hidden { display: none; }
+      .profile-panel {
+        width: min(460px, 92vw);
+        max-height: 94vh;
+        overflow: auto;
+        padding: clamp(22px, 4vw, 34px);
+        background: linear-gradient(150deg, rgba(32, 26, 22, 0.98), rgba(9, 10, 9, 0.99));
+        border: 1px solid rgba(214, 184, 74, 0.55);
+        outline: 1px solid rgba(214, 184, 74, 0.15);
+        outline-offset: 4px;
+        box-shadow: 0 30px 100px rgba(0, 0, 0, 0.75);
+      }
+      .profile-kicker {
+        margin: 0 0 6px;
+        font-size: 9px;
+        letter-spacing: 0.34em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .profile-panel h2 {
+        margin: 0 0 8px;
+        font-family: "GodOfWar", "Cinzel", Georgia, serif;
+        font-size: clamp(24px, 5vw, 36px);
+        font-weight: 400;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #f2e7ce;
+      }
+      .profile-lead {
+        margin: 0 0 18px;
+        font-family: "EB Garamond", Georgia, serif;
+        font-size: 15px;
+        line-height: 1.45;
+        color: #b8ab94;
+      }
+      .profile-label {
+        display: block;
+        margin: 0 0 6px;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        color: var(--gold);
+      }
+      .profile-name {
+        width: 100%;
+        margin: 0 0 16px;
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 18px;
+        color: #f5ecd8;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid rgba(214, 184, 74, 0.35);
+        border-radius: 4px;
+        outline: none;
+      }
+      .profile-name:focus { border-color: rgba(214, 184, 74, 0.8); }
+      .profile-colors {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 0 0 20px;
+      }
+      .profile-swatch {
+        width: 44px;
+        height: 44px;
+        padding: 0;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.16);
+        background: var(--swatch);
+        cursor: pointer;
+        box-shadow: inset 0 -8px 18px rgba(0, 0, 0, 0.35);
+        transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+      }
+      .profile-swatch:hover { transform: scale(1.06); }
+      .profile-swatch.is-selected {
+        border-color: #fff6df;
+        box-shadow: 0 0 0 2px var(--gold), 0 0 16px var(--swatch);
+      }
+      .profile-hint {
+        margin: 10px 0 0;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: #8d816e;
+        text-align: center;
+      }
+
       @media (orientation: landscape) {
         body.touch-device { --bar-width: 96px; }
         body.touch-device .brand { display: none; }
@@ -1353,7 +1450,7 @@
 
     <div class="footer-hud">
       <div class="vitals">
-        <div class="hero-name">Mwanafyale</div>
+        <div class="hero-name" id="hero-name">Mwanafyale</div>
         <div class="health">
           <span>hp</span>
           <span class="health-track"><i id="health-fill"></i></span>
@@ -1506,10 +1603,30 @@
       </div>
     </div>
 
+    <div id="profile-screen">
+      <form id="profile-form" class="profile-panel">
+        <p class="profile-kicker">The God of Rage</p>
+        <h2>Choose your warrior</h2>
+        <p class="profile-lead">Name yourself and pick a colour. Your allies will see both.</p>
+        <label class="profile-label" for="profile-name">Name</label>
+        <input
+          id="profile-name"
+          class="profile-name"
+          maxlength="16"
+          autocomplete="nickname"
+          spellcheck="false"
+          placeholder="Wanderer"
+        />
+        <p class="profile-label">Warrior colour</p>
+        <div id="profile-colors" class="profile-colors"></div>
+        <button class="brief-button" type="submit">Enter the arena</button>
+        <p class="profile-hint">Saved on this device for next time.</p>
+      </form>
+    </div>
+
     <div id="loading">
       <div class="loading-inner">
         <p class="loading-mark">The God of Rage</p>
-        <p class="loading-sub">gods fall. the storm remains.</p>
         <div class="loading-bar"><i></i></div>
       </div>
     </div>

@@ -101,6 +101,10 @@ export const MoveInput = schema({
 export type MoveInput = SchemaType<typeof MoveInput>;
 
 export const Player = schema({
+  /** Chosen before joining; shown above the warrior and in the HUD. */
+  name: t.string(),
+  /** One of PLAYER_COLORS, chosen before joining. */
+  color: t.string(),
   x: t.number(),
   y: t.number(),
   vx: t.number(),

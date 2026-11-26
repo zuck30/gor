@@ -26,6 +26,13 @@ import { createCombatFX } from "./world/effects.js";
 import { createPostFX } from "./world/postfx.js";
 import { VoicePlayer } from "./audio.js";
 import { TRIUMPHS, TriumphBoard, type Triumph } from "./triumphs.js";
+import {
+  PLAYER_COLORS,
+  PROFILE_STORAGE_KEY,
+  sanitizeColor,
+  sanitizeName,
+  type PlayerProfile,
+} from "../shared/profile.js";
 
 const statusEl = document.getElementById("status")!;
 const appEl = document.getElementById("app")!;
@@ -73,6 +80,11 @@ const touchKnob = document.getElementById("touch-knob") as HTMLElement | null;
 const touchAttack = document.getElementById("touch-attack") as HTMLButtonElement | null;
 const touchRage = document.getElementById("touch-rage") as HTMLButtonElement | null;
 const touchSwap = document.getElementById("touch-swap") as HTMLButtonElement | null;
+const heroNameEl = document.getElementById("hero-name")!;
+const profileScreen = document.getElementById("profile-screen")!;
+const profileForm = document.getElementById("profile-form") as HTMLFormElement;
+const profileNameInput = document.getElementById("profile-name") as HTMLInputElement;
+const profileColorsEl = document.getElementById("profile-colors")!;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -426,8 +438,8 @@ function hashSeed(value: string): number {
   return (hash >>> 0) / 4294967296;
 }
 
-async function main() {
-  const room = await client.joinOrCreate("arena");
+async function main(profile: PlayerProfile) {
+  const room = await client.joinOrCreate("arena", profile);
   const predict = Predict.get(room);
 
   predict.attachAll("players", {
@@ -520,19 +532,32 @@ async function main() {
 
   const callbacks = Callbacks.get(room);
 
-  function ensureCharacter(sessionId: string): PlayerRig {
+  function ensureCharacter(
+    sessionId: string,
+    fallbackName?: string,
+    fallbackColor?: string
+  ): PlayerRig {
     const existing = characters.get(sessionId);
     if (existing) {
       return existing;
     }
     const isSelf = sessionId === room.sessionId;
-    const label = isSelf ? "MWANAFYALE" : `ALLY ${sessionId.slice(0, 4).toUpperCase()}`;
-    const rig = createCharacter({ isSelf, sessionId, label });
+    const player = room.state.players.get(sessionId);
+    const label = sanitizeName(player?.name)
+      || sanitizeName(fallbackName)
+      || (isSelf ? sanitizeName(profile.name) : `ALLY ${sessionId.slice(0, 4).toUpperCase()}`)
+      || "Wanderer";
+    const color = sanitizeColor(player?.color)
+      ?? sanitizeColor(fallbackColor)
+      ?? sanitizeColor(profile.color)
+      ?? PLAYER_COLORS[0].value;
+    const rig = createCharacter({ isSelf, sessionId, label, color });
     scene.add(rig.group);
     const entry = { rig, label };
     characters.set(sessionId, entry);
     if (isSelf) {
       selfRig = entry;
+      heroNameEl.textContent = label;
     }
     return entry;
   }
@@ -555,9 +580,9 @@ async function main() {
     return entry;
   }
 
-  ensureCharacter(room.sessionId);
-  for (const [sessionId] of room.state.players) {
-    ensureCharacter(sessionId);
+  ensureCharacter(room.sessionId, self.name, self.color);
+  for (const [sessionId, player] of room.state.players) {
+    ensureCharacter(sessionId, player.name, player.color);
   }
   for (const [id, enemy] of room.state.enemies) {
     ensureEnemy(id, enemy);
@@ -813,8 +838,8 @@ async function main() {
     return predict.value(self, "y");
   }
 
-  callbacks.onAdd("players", (_player, sessionId) => {
-    ensureCharacter(sessionId);
+  callbacks.onAdd("players", (player, sessionId) => {
+    ensureCharacter(sessionId, player.name, player.color);
   });
   callbacks.onRemove("players", (_player, sessionId) => {
     const entry = characters.get(sessionId);
@@ -1292,21 +1317,93 @@ async function main() {
   requestAnimationFrame(frame);
 }
 
-main().catch((error) => {
-  console.error(error);
-  statusEl.textContent = "could not connect";
-  if (loadingEl) {
-    const message = document.createElement("p");
-    message.textContent = "The storm could not reach this arena. Is the server running?";
-    loadingEl.appendChild(message);
-    if (!(import.meta as any).env?.VITE_SERVER_URL && location.hostname !== "localhost") {
-      const hint = document.createElement("p");
-      hint.textContent = "Static deployment: set VITE_SERVER_URL to the public Colyseus server.";
-      loadingEl.appendChild(hint);
-    }
-    loadingEl.classList.add("has-error");
+function loadProfile(): PlayerProfile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
+    if (!raw) { return null; }
+    const parsed = JSON.parse(raw) as { name?: unknown; color?: unknown };
+    const name = sanitizeName(parsed?.name);
+    const color = sanitizeColor(parsed?.color);
+    return name && color ? { name, color } : null;
+  } catch {
+    return null;
   }
-});
+}
+
+function saveProfile(profile: PlayerProfile) {
+  try {
+    localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {
+    // A private window simply forgets the profile.
+  }
+}
+
+let gameStarted = false;
+
+function startGame(profile: PlayerProfile) {
+  if (gameStarted) { return; }
+  gameStarted = true;
+  main(profile).catch((error) => {
+    console.error(error);
+    statusEl.textContent = "could not connect";
+    if (loadingEl) {
+      const message = document.createElement("p");
+      message.textContent = "The storm could not reach this arena. Is the server running?";
+      loadingEl.appendChild(message);
+      if (!(import.meta as any).env?.VITE_SERVER_URL && location.hostname !== "localhost") {
+        const hint = document.createElement("p");
+        hint.textContent = "Static deployment: set VITE_SERVER_URL to the public Colyseus server.";
+        loadingEl.appendChild(hint);
+      }
+      loadingEl.classList.add("has-error");
+    }
+  });
+}
+
+function setupProfile() {
+  const stored = loadProfile();
+  let selectedColor = stored?.color ?? PLAYER_COLORS[0].value;
+  profileNameInput.value = stored?.name ?? "";
+
+  const swatches: HTMLButtonElement[] = [];
+  PLAYER_COLORS.forEach((entry) => {
+    const swatch = document.createElement("button");
+    swatch.type = "button";
+    swatch.className = "profile-swatch";
+    swatch.style.setProperty("--swatch", entry.value);
+    swatch.title = entry.name;
+    swatch.setAttribute("aria-label", entry.name);
+    swatch.addEventListener("click", () => {
+      selectedColor = entry.value;
+      paint();
+    });
+    swatches.push(swatch);
+    profileColorsEl.append(swatch);
+  });
+
+  function paint() {
+    swatches.forEach((swatch, index) => {
+      swatch.classList.toggle("is-selected", PLAYER_COLORS[index].value === selectedColor);
+    });
+  }
+  paint();
+
+  profileForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = sanitizeName(profileNameInput.value) || "Wanderer";
+    const color = sanitizeColor(selectedColor) ?? PLAYER_COLORS[0].value;
+    const profile = { name, color };
+    saveProfile(profile);
+    profileScreen.classList.add("is-hidden");
+    startGame(profile);
+  });
+
+  if (!stored) {
+    window.setTimeout(() => profileNameInput.focus(), 300);
+  }
+}
+
+setupProfile();
 
 addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
