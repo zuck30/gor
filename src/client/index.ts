@@ -47,6 +47,7 @@ import {
   sanitizeMode,
   type GameMode,
 } from "../shared/modes.js";
+import { sanitizeChat, type ChatMessage } from "../shared/chat.js";
 
 const statusEl = document.getElementById("status")!;
 const appEl = document.getElementById("app")!;
@@ -123,6 +124,13 @@ const briefTitle = document.getElementById("brief-title")!;
 const briefLead = document.getElementById("brief-lead")!;
 const briefRules = document.getElementById("brief-rules") as HTMLOListElement;
 const briefFoes = document.getElementById("brief-foes")!;
+const chatEl = document.getElementById("chat")!;
+const chatToggle = document.getElementById("chat-toggle") as HTMLButtonElement;
+const chatClose = document.getElementById("chat-close") as HTMLButtonElement;
+const chatLog = document.getElementById("chat-log")!;
+const chatForm = document.getElementById("chat-form") as HTMLFormElement;
+const chatInput = document.getElementById("chat-input") as HTMLInputElement;
+const chatUnread = document.getElementById("chat-unread")!;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -346,6 +354,12 @@ let touchActive = false;
 let touchStickId: number | null = null;
 const TOUCH_RADIUS = 42;
 
+/** Typing in chat must never move the warrior or swing a weapon. */
+function isTextEntry(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  return !!element?.closest?.("input, textarea, select, [contenteditable='true']");
+}
+
 function updateTouchStick(dx: number, dy: number) {
   const length = Math.hypot(dx, dy);
   const scale = length > TOUCH_RADIUS ? TOUCH_RADIUS / length : 1;
@@ -423,6 +437,7 @@ touchSwap?.addEventListener("touchstart", (event) => {
 }, { passive: false });
 
 addEventListener("keydown", (e) => {
+  if (isTextEntry(e.target)) { return; }
   const key = e.key.toLowerCase();
   held.add(key);
   if (e.code === "Space") {
@@ -439,7 +454,7 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => held.delete(e.key.toLowerCase()));
 addEventListener("mousedown", (e) => {
   if (e.button !== 0) { return; }
-  if ((e.target as HTMLElement | null)?.closest?.("#sound-toggle, #help-toggle, #pause-toggle, #pause-screen, #brief, .brief-button")) { return; }
+  if ((e.target as HTMLElement | null)?.closest?.("#sound-toggle, #help-toggle, #pause-toggle, #pause-screen, #brief, #chat, .brief-button")) { return; }
   mouseHeld = true;
   attackQueued = true;
 });
@@ -528,6 +543,76 @@ async function main(profile: PlayerProfile) {
   let briefOpen = false;
   let initialBrief = false;
 
+  // ---- room chat ---------------------------------------------------------
+  const CHAT_HISTORY_LIMIT = 40;
+  let chatOpen = false;
+  let chatUnreadCount = 0;
+
+  function setChatOpen(open: boolean) {
+    chatOpen = open;
+    chatEl.classList.toggle("is-open", open);
+    if (open) {
+      chatUnreadCount = 0;
+      chatUnread.hidden = true;
+      chatInput.focus();
+      chatLog.scrollTop = chatLog.scrollHeight;
+    } else {
+      chatInput.blur();
+    }
+  }
+
+  function appendChat(message: ChatMessage) {
+    chatLog.querySelector(".chat-empty")?.remove();
+
+    const pinned = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 24;
+    const line = document.createElement("p");
+    line.className = message.sessionId === room.sessionId ? "chat-line is-self" : "chat-line";
+
+    const who = document.createElement("b");
+    who.textContent = message.name;
+    who.style.color = message.color;
+
+    const text = document.createElement("span");
+    text.textContent = message.text;
+
+    line.append(who, text);
+    chatLog.append(line);
+
+    while (chatLog.childElementCount > CHAT_HISTORY_LIMIT) {
+      chatLog.firstElementChild?.remove();
+    }
+
+    if (chatOpen) {
+      if (pinned) { chatLog.scrollTop = chatLog.scrollHeight; }
+      return;
+    }
+
+    chatUnreadCount = Math.min(99, chatUnreadCount + 1);
+    chatUnread.textContent = String(chatUnreadCount);
+    chatUnread.hidden = false;
+  }
+
+  chatToggle.addEventListener("click", () => setChatOpen(true));
+  chatClose.addEventListener("click", () => setChatOpen(false));
+
+  chatForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = sanitizeChat(chatInput.value);
+    chatInput.value = "";
+    if (text) { room.send("chat", text); }
+    chatInput.focus();
+  });
+
+  chatInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") { return; }
+    event.preventDefault();
+    event.stopPropagation();
+    setChatOpen(false);
+  });
+
+  room.onMessage("chat", (message: ChatMessage) => appendChat(message));
+  // -------------------------------------------------------------------------
+
   function updateBriefForMode() {
     const rules = MODE_RULES[profile.mode];
     briefKicker.textContent = profile.mode === "duel"
@@ -556,8 +641,10 @@ async function main(profile: PlayerProfile) {
 
   function setBrief(open: boolean) {
     briefOpen = open;
+    document.body.classList.toggle("is-brief", open);
     briefEl.classList.toggle("is-visible", open);
     if (open) {
+      setChatOpen(false);
       briefAction.textContent = room.state.started
         ? "Return to the fight"
         : profile.mode === "coop"
@@ -595,6 +682,7 @@ async function main(profile: PlayerProfile) {
   matchOverButton.addEventListener("click", () => room.send("restart"));
 
   addEventListener("keydown", (e) => {
+    if (isTextEntry(e.target)) { return; }
     const key = e.key.toLowerCase();
     if (key === "h") {
       e.preventDefault();
@@ -606,10 +694,22 @@ async function main(profile: PlayerProfile) {
     } else if (e.key === "Enter" && briefOpen) {
       e.preventDefault();
       beginOrClose();
-    } else if (e.key === "Escape" && briefOpen && room.state.started) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      setBrief(false);
-    } else if (key === "p" && !briefOpen) {
+      if (chatOpen) {
+        chatInput.focus();
+      } else {
+        setChatOpen(true);
+      }
+    } else if (e.key === "Escape") {
+      if (chatOpen) {
+        e.preventDefault();
+        setChatOpen(false);
+      } else if (briefOpen && room.state.started) {
+        e.preventDefault();
+        setBrief(false);
+      }
+    } else if (key === "p" && !briefOpen && !chatOpen) {
       e.preventDefault();
       togglePause();
     }

@@ -13,6 +13,7 @@ import {
   STORM_START_RADIUS,
   TICK_RATE,
 } from "../src/shared/constants.js";
+import { CHAT_MAX_LENGTH } from "../src/shared/chat.js";
 
 describe("testing your Colyseus app", () => {
   let colyseus: ColyseusTestServer<typeof appConfig>;
@@ -189,6 +190,21 @@ describe("testing your Colyseus app", () => {
     assert.strictEqual(room.state.started, true, "the remaining warrior keeps playing");
     assert.strictEqual(room.state.matchState, MATCH_STATE.live);
     assert.strictEqual(room.state.players.size, 1);
+  });
+
+  it("broadcasts sanitized chat to every warrior", async () => {
+    const room = await colyseus.createRoom<ArenaState>("arena", {});
+    const client1 = await colyseus.connectTo(room, { name: "Alpha" });
+    const client2 = await colyseus.connectTo(room, { name: "Beta" });
+
+    const received = client2.waitForMessage("chat");
+    client1.send("chat", `  hello   storm \u0007 ${"a".repeat(CHAT_MAX_LENGTH * 2)}  `);
+    const payload = await received;
+
+    assert.strictEqual(payload.name, "Alpha");
+    assert.strictEqual(payload.sessionId, client1.sessionId);
+    assert.ok(payload.text.startsWith("hello storm"));
+    assert.strictEqual(payload.text.length, CHAT_MAX_LENGTH);
   });
 
   it("splits siege players into opposing tribes and charges the altar", async () => {

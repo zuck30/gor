@@ -25,6 +25,7 @@ against the storm until a rival arrives.
 | Change weapon | `E` |
 | Rage | `Q` |
 | Stop | `P` |
+| Talk | `Enter` |
 | Help | `H` |
 
 </div>

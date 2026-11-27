@@ -34,6 +34,7 @@ import {
   type StormPhase,
 } from "../shared/constants.js";
 import { MODE_CODE, TEAM_NAMES, modeForRoom, type GameMode } from "../shared/modes.js";
+import { CHAT_COOLDOWN_MS, sanitizeChat, type ChatMessage } from "../shared/chat.js";
 import {
   applyDamage,
   lerpCircle,
@@ -114,6 +115,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private invulnerable = new Map<string, number>();
   private enemyCooldown = new Map<string, number>();
   private comboTimer = new Map<string, number>();
+  /** Last chat timestamp per session, so one client cannot flood the room. */
+  private chatCooldown = new Map<string, number>();
 
   messages = {
     // movement arrives through the input buffer above - register handlers here
@@ -174,6 +177,27 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       // The slow-motion finale freezes the arena, so it is solo only.
       if (this.state.players.size > 1) { return; }
       this.cinematicRemaining = 4.8;
+    });
+
+    this.onMessage("chat", (client, text) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) { return; }
+
+      const message = sanitizeChat(text);
+      if (!message) { return; }
+
+      const now = Date.now();
+      const last = this.chatCooldown.get(client.sessionId) ?? 0;
+      if (now - last < CHAT_COOLDOWN_MS) { return; }
+      this.chatCooldown.set(client.sessionId, now);
+
+      const payload: ChatMessage = {
+        sessionId: client.sessionId,
+        name: sanitizeName(player.name) || "Wanderer",
+        color: player.color,
+        text: message,
+      };
+      this.broadcast("chat", payload);
     });
 
     if (process.env.NODE_ENV !== "production") {
@@ -298,6 +322,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.rageTimer.delete(client.sessionId);
     this.invulnerable.delete(client.sessionId);
     this.comboTimer.delete(client.sessionId);
+    this.chatCooldown.delete(client.sessionId);
 
     if (this.state.players.size === 0) {
       this.resetToWaiting();
