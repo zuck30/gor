@@ -96,11 +96,6 @@ export const VOICE_LINES = {
     text: "Drop.",
     volume: 0.85,
   },
-  hit1: {
-    file: "survivor-hit-01.mp3",
-    text: "",
-    volume: 0.5,
-  },
   hit2: {
     file: "survivor-hit-02.mp3",
     text: "",

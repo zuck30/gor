@@ -24,8 +24,9 @@ against the storm until a rival arrives.
 | Hit | Left mouse / `Space` |
 | Change weapon | `E` |
 | Rage | `Q` |
-| Stop | `P` |
-| Talk | `Enter` |
+| Pause | `P` / `Enter` |
+| Talk | `C` |
+| Voice | mic button |
 | Help | `H` |
 
 </div>

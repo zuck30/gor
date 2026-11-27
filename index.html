@@ -1266,6 +1266,53 @@
       #sound-toggle.is-muted .icon-on { display: none; }
       #sound-toggle.is-muted .icon-off { display: block; }
 
+      #voice-toggle,
+      #voice-toggle-panel {
+        padding: 0;
+        display: grid;
+        place-items: center;
+        color: #7f7668;
+        background: var(--panel);
+        border: 1px solid rgba(214, 184, 74, 0.28);
+        border-radius: 999px;
+        cursor: pointer;
+        pointer-events: auto;
+        transition: color 0.2s, border-color 0.2s, opacity 0.2s;
+      }
+      #voice-toggle {
+        width: 34px;
+        height: 34px;
+        backdrop-filter: blur(8px);
+      }
+      #voice-toggle-panel {
+        width: 22px;
+        height: 22px;
+        background: none;
+        border-color: transparent;
+      }
+      #voice-toggle:hover,
+      #voice-toggle:focus-visible,
+      #voice-toggle-panel:hover,
+      #voice-toggle-panel:focus-visible {
+        color: var(--text);
+        border-color: rgba(214, 184, 74, 0.8);
+        outline: none;
+      }
+      #voice-toggle svg { width: 16px; height: 16px; display: block; }
+      #voice-toggle-panel svg { width: 14px; height: 14px; display: block; }
+      #voice-toggle .icon-mic,
+      #voice-toggle-panel .icon-mic { display: none; }
+      #voice-toggle.is-live,
+      #voice-toggle-panel.is-live { color: #9ad8c0; border-color: rgba(154, 216, 192, 0.65); }
+      #voice-toggle.is-live .icon-mic,
+      #voice-toggle-panel.is-live .icon-mic { display: block; }
+      #voice-toggle.is-live .icon-mic-off,
+      #voice-toggle-panel.is-live .icon-mic-off { display: none; }
+      #voice-toggle.is-muted,
+      #voice-toggle-panel.is-muted { color: var(--gold); border-color: rgba(214, 184, 74, 0.55); }
+      #voice-toggle.is-requesting,
+      #voice-toggle-panel.is-requesting { opacity: 0.55; cursor: wait; }
+
       #pause-toggle {
         width: 36px;
         height: 36px;
@@ -1365,6 +1412,12 @@
         border-radius: 999px;
       }
       .chat-unread[hidden] { display: none; }
+      .chat-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      #chat.is-open .chat-actions { display: none; }
 
       .chat-panel {
         display: none;
@@ -1402,6 +1455,25 @@
         cursor: pointer;
       }
       #chat-close:hover { color: var(--text); }
+
+      .chat-head-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      #voice-leave {
+        padding: 0;
+        font-family: "Cinzel", Georgia, serif;
+        font-size: 8px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #9ad8c0;
+        background: none;
+        border: 0;
+        cursor: pointer;
+      }
+      #voice-leave:hover { color: var(--text); }
+      #voice-leave[hidden] { display: none; }
 
       .chat-log {
         display: flex;
@@ -1852,25 +1924,50 @@
         <strong>move</strong> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><br />
         <strong>axe</strong> <kbd>LMB</kbd> / <kbd>Space</kbd><br />
         <strong>rage</strong> <kbd>Q</kbd> <strong>pause</strong> <kbd>P</kbd><br />
-        <strong>rules</strong> <kbd>H</kbd> <strong>talk</strong> <kbd>Enter</kbd>
+        <strong>rules</strong> <kbd>H</kbd> <strong>talk</strong> <kbd>C</kbd>
       </div>
     </div>
 
     <div id="chat">
-      <button id="chat-toggle" class="chat-toggle" type="button" aria-label="Open chat" title="Chat (Enter)">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
-        </svg>
-        <span>chat</span>
-        <b id="chat-unread" class="chat-unread" hidden>0</b>
-      </button>
+      <div class="chat-actions">
+        <button id="chat-toggle" class="chat-toggle" type="button" aria-label="Open chat" title="Chat (C)">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          </svg>
+          <span>chat</span>
+          <b id="chat-unread" class="chat-unread" hidden>0</b>
+        </button>
+        <button id="voice-toggle" type="button" aria-label="Join voice chat" title="Join voice chat (headphones recommended)">
+          <svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/>
+            <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+          <svg class="icon-mic-off" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/>
+            <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
       <section class="chat-panel" aria-label="Chat">
         <header class="chat-head">
           <span>war camp</span>
-          <button id="chat-close" type="button" aria-label="Close chat">×</button>
+          <div class="chat-head-actions">
+            <button id="voice-toggle-panel" type="button" aria-label="Join voice chat" title="Join voice chat (headphones recommended)">
+              <svg class="icon-mic" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/>
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+              <svg class="icon-mic-off" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/>
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <button id="voice-leave" type="button" hidden>leave voice</button>
+            <button id="chat-close" type="button" aria-label="Close chat">×</button>
+          </div>
         </header>
         <div id="chat-log" class="chat-log" role="log" aria-live="polite">
-          <p class="chat-empty">No words yet. Press Enter to speak.</p>
+          <p class="chat-empty">No words yet. Type to speak. Press C to close.</p>
         </div>
         <form id="chat-form" class="chat-form">
           <input id="chat-input" type="text" maxlength="140" autocomplete="off" spellcheck="false" placeholder="say something…" aria-label="Chat message" />
@@ -1948,7 +2045,7 @@
         <h2>Paused</h2>
         <p class="pause-sub">The storm waits. Take a breath.</p>
         <button id="pause-resume" class="brief-button" type="button">Resume</button>
-        <p class="pause-hint">press <kbd>P</kbd> to resume</p>
+        <p class="pause-hint">press <kbd>P</kbd> or <kbd>Enter</kbd> to resume</p>
       </div>
     </div>
 

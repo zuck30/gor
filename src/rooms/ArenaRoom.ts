@@ -117,6 +117,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private comboTimer = new Map<string, number>();
   /** Last chat timestamp per session, so one client cannot flood the room. */
   private chatCooldown = new Map<string, number>();
+  /** Sessions that opted into the WebRTC voice mesh for this room. */
+  private voiceClients = new Set<string>();
 
   messages = {
     // movement arrives through the input buffer above - register handlers here
@@ -172,6 +174,15 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       this.state.paused = !this.state.paused;
     });
 
+    // Explicit state, so the rules overlay can pause and resume without a
+    // toggle race when a rival joins or leaves mid-read.
+    this.onMessage("setPause", (_client, paused) => {
+      if (!this.started) { return; }
+      const next = paused === true;
+      if (next && this.state.players.size > 1) { return; }
+      this.state.paused = next;
+    });
+
     this.onMessage("rageCinematic", () => {
       if (!this.started || this.state.paused) { return; }
       // The slow-motion finale freezes the arena, so it is solo only.
@@ -198,6 +209,48 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
         text: message,
       };
       this.broadcast("chat", payload);
+    });
+
+    // Voice is peer-to-peer WebRTC. The room only relays offers, answers and
+    // ICE candidates between warriors who have opted into the voice mesh.
+    this.onMessage("voice", (client, message) => {
+      if (!message || typeof message !== "object") { return; }
+      const kind = (message as any).kind;
+
+      if (kind === "join") {
+        if (this.voiceClients.has(client.sessionId)) { return; }
+        const peers = [...this.voiceClients];
+        this.voiceClients.add(client.sessionId);
+        client.send("voice", { kind: "peers", peers });
+        // Only warriors already in the mesh need to know about the newcomer.
+        for (const peerId of peers) {
+          this.clients.getById(peerId)?.send("voice", {
+            kind: "peer-joined",
+            sessionId: client.sessionId,
+          });
+        }
+        return;
+      }
+
+      if (kind === "leave") {
+        this.removeVoice(client.sessionId);
+        return;
+      }
+
+      if (kind !== "signal") { return; }
+      if (!this.voiceClients.has(client.sessionId)) { return; }
+
+      const to = (message as any).to;
+      if (typeof to !== "string" || !this.voiceClients.has(to)) { return; }
+
+      const data = (message as any).data;
+      if (!data || typeof data !== "object") { return; }
+      // SDP can be a few KB. Anything larger is not a real handshake.
+      if (JSON.stringify(data).length > 32_000) { return; }
+
+      const target = this.clients.getById(to);
+      if (!target) { return; }
+      target.send("voice", { kind: "signal", from: client.sessionId, data });
     });
 
     if (process.env.NODE_ENV !== "production") {
@@ -323,6 +376,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.invulnerable.delete(client.sessionId);
     this.comboTimer.delete(client.sessionId);
     this.chatCooldown.delete(client.sessionId);
+    this.removeVoice(client.sessionId);
 
     if (this.state.players.size === 0) {
       this.resetToWaiting();
@@ -356,6 +410,17 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       this.finishMatch(TEAM_NAMES[1], 1);
     } else if (blue === 0) {
       this.finishMatch(TEAM_NAMES[0], 0);
+    }
+  }
+
+  /** Drop a warrior from the voice mesh and let the others tear down audio. */
+  private removeVoice(sessionId: string) {
+    if (!this.voiceClients.delete(sessionId)) { return; }
+    for (const peerId of this.voiceClients) {
+      this.clients.getById(peerId)?.send("voice", {
+        kind: "peer-left",
+        sessionId,
+      });
     }
   }
 

@@ -158,6 +158,27 @@ describe("testing your Colyseus app", () => {
     assert.ok(room.state.enemies.size > 0, "the solo siege player still fights monsters");
   });
 
+  it("pauses a solo hunt but never freezes a shared arena", async () => {
+    const room = await colyseus.createRoom<ArenaState>("duel", {});
+    const client1 = await colyseus.connectTo(room, { name: "Solo" });
+    client1.send("ready");
+    await room.waitForNextTimestep();
+
+    client1.send("setPause", true);
+    await room.waitForNextTimestep();
+    assert.strictEqual(room.state.paused, true, "rules may pause a solo hunt");
+
+    client1.send("setPause", false);
+    await room.waitForNextTimestep();
+    assert.strictEqual(room.state.paused, false, "closing the rules resumes");
+
+    const client2 = await colyseus.connectTo(room, { name: "Rival" });
+    await room.waitForNextTimestep();
+    client2.send("setPause", true);
+    await room.waitForNextTimestep();
+    assert.strictEqual(room.state.paused, false, "one warrior cannot freeze the arena");
+  });
+
   it("switches a solo practice hunt to a real duel when a rival arrives", async () => {
     const room = await colyseus.createRoom<ArenaState>("duel", {});
     const client1 = await colyseus.connectTo(room, { name: "Alpha" });
@@ -205,6 +226,39 @@ describe("testing your Colyseus app", () => {
     assert.strictEqual(payload.sessionId, client1.sessionId);
     assert.ok(payload.text.startsWith("hello storm"));
     assert.strictEqual(payload.text.length, CHAT_MAX_LENGTH);
+  });
+
+  it("relays voice signaling between opted-in warriors", async () => {
+    const room = await colyseus.createRoom<ArenaState>("arena", {});
+    const client1 = await colyseus.connectTo(room, { name: "Alpha" });
+    const client2 = await colyseus.connectTo(room, { name: "Beta" });
+
+    const peersOne = client1.waitForMessage("voice");
+    client1.send("voice", { kind: "join" });
+    assert.deepStrictEqual(await peersOne, { kind: "peers", peers: [] });
+
+    const joinedOne = client1.waitForMessage("voice");
+    const peersTwo = client2.waitForMessage("voice");
+    client2.send("voice", { kind: "join" });
+    const [joined, peers] = await Promise.all([joinedOne, peersTwo]);
+
+    assert.deepStrictEqual(peers, { kind: "peers", peers: [client1.sessionId] });
+    assert.deepStrictEqual(joined, {
+      kind: "peer-joined",
+      sessionId: client2.sessionId,
+    });
+
+    const relayed = client2.waitForMessage("voice");
+    client1.send("voice", {
+      kind: "signal",
+      to: client2.sessionId,
+      data: { type: "offer", sdp: "probe" },
+    });
+    assert.deepStrictEqual(await relayed, {
+      kind: "signal",
+      from: client1.sessionId,
+      data: { type: "offer", sdp: "probe" },
+    });
   });
 
   it("splits siege players into opposing tribes and charges the altar", async () => {

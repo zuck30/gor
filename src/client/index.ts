@@ -48,6 +48,7 @@ import {
   type GameMode,
 } from "../shared/modes.js";
 import { sanitizeChat, type ChatMessage } from "../shared/chat.js";
+import { VoiceChat, type VoiceState } from "./voice.js";
 
 const statusEl = document.getElementById("status")!;
 const appEl = document.getElementById("app")!;
@@ -131,6 +132,9 @@ const chatLog = document.getElementById("chat-log")!;
 const chatForm = document.getElementById("chat-form") as HTMLFormElement;
 const chatInput = document.getElementById("chat-input") as HTMLInputElement;
 const chatUnread = document.getElementById("chat-unread")!;
+const voiceToggle = document.getElementById("voice-toggle") as HTMLButtonElement;
+const voiceTogglePanel = document.getElementById("voice-toggle-panel") as HTMLButtonElement;
+const voiceLeave = document.getElementById("voice-leave") as HTMLButtonElement;
 
 const toWorldX = (x: number) => x - ARENA_WIDTH / 2;
 const toWorldZ = (y: number) => y - ARENA_HEIGHT / 2;
@@ -360,6 +364,19 @@ function isTextEntry(target: EventTarget | null): boolean {
   return !!element?.closest?.("input, textarea, select, [contenteditable='true']");
 }
 
+/** The chat panel is open, even if its input does not have focus yet. */
+function isChatOpen(): boolean {
+  return chatEl.classList.contains("is-open");
+}
+
+/** A key that should be typed into the chat input rather than control the game. */
+function isPrintableKey(event: KeyboardEvent): boolean {
+  return event.key.length === 1
+    && !event.ctrlKey
+    && !event.metaKey
+    && !event.altKey;
+}
+
 function updateTouchStick(dx: number, dy: number) {
   const length = Math.hypot(dx, dy);
   const scale = length > TOUCH_RADIUS ? TOUCH_RADIUS / length : 1;
@@ -437,7 +454,7 @@ touchSwap?.addEventListener("touchstart", (event) => {
 }, { passive: false });
 
 addEventListener("keydown", (e) => {
-  if (isTextEntry(e.target)) { return; }
+  if (isTextEntry(e.target) || isChatOpen()) { return; }
   const key = e.key.toLowerCase();
   held.add(key);
   if (e.code === "Space") {
@@ -542,23 +559,27 @@ async function main(profile: PlayerProfile) {
 
   let briefOpen = false;
   let initialBrief = false;
+  // The rules pause a solo hunt. Only resume if the rules were what paused it.
+  let briefPaused = false;
+  let briefResuming = false;
 
   // ---- room chat ---------------------------------------------------------
   const CHAT_HISTORY_LIMIT = 40;
   let chatOpen = false;
   let chatUnreadCount = 0;
 
-  function setChatOpen(open: boolean) {
+  function setChatOpen(open: boolean, focus = true) {
     chatOpen = open;
     chatEl.classList.toggle("is-open", open);
-    if (open) {
-      chatUnreadCount = 0;
-      chatUnread.hidden = true;
-      chatInput.focus();
-      chatLog.scrollTop = chatLog.scrollHeight;
-    } else {
+    if (!open) {
       chatInput.blur();
+      return;
     }
+
+    chatUnreadCount = 0;
+    chatUnread.hidden = true;
+    if (focus) { chatInput.focus(); }
+    chatLog.scrollTop = chatLog.scrollHeight;
   }
 
   function appendChat(message: ChatMessage) {
@@ -611,6 +632,52 @@ async function main(profile: PlayerProfile) {
   });
 
   room.onMessage("chat", (message: ChatMessage) => appendChat(message));
+
+  // ---- voice chat --------------------------------------------------------
+  function paintVoiceState(state: VoiceState) {
+    const live = state === "on";
+    const muted = state === "muted";
+    const label =
+      state === "off" ? "Join voice chat"
+      : state === "requesting" ? "Waiting for microphone permission"
+      : live ? "Mute microphone"
+      : "Unmute microphone";
+    const hint =
+      state === "off" ? "Join voice chat (headphones recommended)"
+      : state === "requesting" ? "Waiting for microphone permission"
+      : live ? "Mute microphone"
+      : "Unmute microphone";
+
+    for (const button of [voiceToggle, voiceTogglePanel]) {
+      button.classList.toggle("is-live", live);
+      button.classList.toggle("is-muted", muted);
+      button.classList.toggle("is-requesting", state === "requesting");
+      button.disabled = state === "requesting";
+      button.setAttribute("aria-label", label);
+      button.title = hint;
+    }
+    voiceLeave.hidden = !live && !muted;
+  }
+
+  const voice = new VoiceChat(
+    room,
+    (state) => paintVoiceState(state),
+    (text) => announce(text, 2000),
+  );
+
+  const toggleVoice = () => {
+    const state = voice.getState();
+    if (state === "off") {
+      void voice.enable();
+    } else if (state !== "requesting") {
+      voice.toggleMute();
+    }
+  };
+  voiceToggle.addEventListener("click", toggleVoice);
+  voiceTogglePanel.addEventListener("click", toggleVoice);
+  voiceLeave.addEventListener("click", () => voice.disable());
+  room.onLeave(() => voice.destroy());
+  paintVoiceState("off");
   // -------------------------------------------------------------------------
 
   function updateBriefForMode() {
@@ -640,9 +707,11 @@ async function main(profile: PlayerProfile) {
   }
 
   function setBrief(open: boolean) {
+    if (open === briefOpen) { return; }
     briefOpen = open;
     document.body.classList.toggle("is-brief", open);
     briefEl.classList.toggle("is-visible", open);
+
     if (open) {
       setChatOpen(false);
       briefAction.textContent = room.state.started
@@ -653,6 +722,22 @@ async function main(profile: PlayerProfile) {
             ? "Hunt alone"
             : "Enter the arena";
       renderTriumphs();
+
+      // Reading the rules should stop the storm eating you. Shared arenas
+      // cannot pause, so the brief simply overlays the fight there.
+      if (
+        room.state.started
+        && !room.state.paused
+        && room.state.players.size <= 1
+        && !document.body.classList.contains("is-cinematic")
+      ) {
+        room.send("setPause", true);
+        briefPaused = true;
+      }
+    } else if (briefPaused) {
+      briefPaused = false;
+      briefResuming = true;
+      room.send("setPause", false);
     }
   }
 
@@ -684,6 +769,32 @@ async function main(profile: PlayerProfile) {
   addEventListener("keydown", (e) => {
     if (isTextEntry(e.target)) { return; }
     const key = e.key.toLowerCase();
+
+    // C toggles the chat panel. Opening this way leaves the caret alone so the
+    // same C closes it again; any other printable key starts the message.
+    if (key === "c" && !briefOpen && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      setChatOpen(!chatOpen, false);
+      return;
+    }
+
+    if (chatOpen) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setChatOpen(false);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        chatInput.focus();
+      } else if (isPrintableKey(e)) {
+        e.preventDefault();
+        const start = chatInput.selectionStart ?? chatInput.value.length;
+        const end = chatInput.selectionEnd ?? start;
+        chatInput.focus();
+        chatInput.setRangeText(e.key, start, end, "end");
+      }
+      return;
+    }
+
     if (key === "h") {
       e.preventDefault();
       if (briefOpen) {
@@ -694,22 +805,16 @@ async function main(profile: PlayerProfile) {
     } else if (e.key === "Enter" && briefOpen) {
       e.preventDefault();
       beginOrClose();
+    } else if (e.key === "Enter" && room.state.paused) {
+      e.preventDefault();
+      togglePause();
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (chatOpen) {
-        chatInput.focus();
-      } else {
-        setChatOpen(true);
-      }
-    } else if (e.key === "Escape") {
-      if (chatOpen) {
-        e.preventDefault();
-        setChatOpen(false);
-      } else if (briefOpen && room.state.started) {
-        e.preventDefault();
-        setBrief(false);
-      }
-    } else if (key === "p" && !briefOpen && !chatOpen) {
+      setChatOpen(true);
+    } else if (e.key === "Escape" && briefOpen && room.state.started) {
+      e.preventDefault();
+      setBrief(false);
+    } else if (key === "p" && !briefOpen) {
       e.preventDefault();
       togglePause();
     }
@@ -936,10 +1041,13 @@ async function main(profile: PlayerProfile) {
     const matchOver = room.state.matchState === MATCH_STATE.matchOver;
     const roundOver = room.state.matchState === MATCH_STATE.roundOver;
 
+    if (!paused) { briefResuming = false; }
     pauseToggle.classList.toggle("is-paused", paused);
     pauseToggle.setAttribute("aria-label", paused ? "Resume" : "Pause");
     pauseToggle.title = paused ? "Resume" : "Pause";
-    pauseScreen.classList.toggle("is-visible", paused);
+    // While the rules are open the pause screen would cover them. Keep the
+    // hunt paused without stacking two overlays.
+    pauseScreen.classList.toggle("is-visible", paused && !briefOpen && !briefResuming);
 
     const stormMode = room.state.stormMode;
     const seconds = Math.ceil(room.state.stormTimer);
@@ -1369,7 +1477,6 @@ async function main(profile: PlayerProfile) {
   let lastCountdownPhase = -1;
   let lastOutside = -100;
   let lastKillCall = -100;
-  let lastHitVoice = -100;
   let lastThunderAt = -100;
   let lastThrowSeq = self.throwSeq ?? 0;
   let rageSpokenAt = -100;
@@ -1640,10 +1747,6 @@ async function main(profile: PlayerProfile) {
     if (self.alive && self.health < lastSelfHealth - 0.05) {
       hurt = Math.min(0.75, hurt + 0.48);
       fx.kick(0.3);
-      if (elapsed - lastHitVoice > 1.15) {
-        lastHitVoice = elapsed;
-        voices.play("hit1");
-      }
     }
     lastSelfHealth = self.health;
 
