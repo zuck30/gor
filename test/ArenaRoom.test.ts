@@ -125,6 +125,72 @@ describe("testing your Colyseus app", () => {
     assert.strictEqual(room.state.players.get(client1.sessionId)?.wins, 1);
   });
 
+  it("starts a solo practice hunt when one warrior enters a duel", async () => {
+    const room = await colyseus.createRoom<ArenaState>("duel", {});
+    const client1 = await colyseus.connectTo(room, { name: "Solo" });
+    client1.send("ready");
+    await room.waitForNextTimestep();
+
+    assert.strictEqual(room.state.started, true, "the lone duelist is not stuck waiting");
+    assert.strictEqual(room.state.matchState, MATCH_STATE.live);
+    assert.strictEqual(room.state.round, 0, "practice is not a duel round");
+
+    // A real duel would end the round instantly with one warrior. Practice
+    // keeps running, and waves spawn so there is something to fight.
+    await room.waitForNextTimestep();
+    assert.strictEqual(room.state.matchState, MATCH_STATE.live);
+    (room as any).startWave();
+    assert.ok(room.state.enemies.size > 0, "the solo duelist hunts a wave");
+  });
+
+  it("starts a solo practice hunt in siege without a phantom capture", async () => {
+    const room = await colyseus.createRoom<ArenaState>("siege", {});
+    const client1 = await colyseus.connectTo(room, { name: "Solo" });
+    client1.send("ready");
+    await room.waitForNextTimestep();
+
+    assert.strictEqual(room.state.started, true);
+    assert.strictEqual(room.state.matchState, MATCH_STATE.live);
+    assert.strictEqual(room.state.altar, 0, "practice does not charge the altar alone");
+
+    (room as any).startWave();
+    assert.ok(room.state.enemies.size > 0, "the solo siege player still fights monsters");
+  });
+
+  it("switches a solo practice hunt to a real duel when a rival arrives", async () => {
+    const room = await colyseus.createRoom<ArenaState>("duel", {});
+    const client1 = await colyseus.connectTo(room, { name: "Alpha" });
+    client1.send("ready");
+    await room.waitForNextTimestep();
+    (room as any).startWave();
+    assert.ok(room.state.enemies.size > 0);
+
+    const client2 = await colyseus.connectTo(room, { name: "Beta" });
+    await room.waitForNextTimestep();
+
+    assert.strictEqual(room.state.players.size, 2);
+    assert.strictEqual(room.state.matchState, MATCH_STATE.live);
+    assert.strictEqual(room.state.round, 1, "the real duel round begins");
+    assert.strictEqual(room.state.enemies.size, 0, "practice monsters are cleared");
+    assert.strictEqual(room.state.players.get(client1.sessionId)?.alive, true);
+    assert.strictEqual(room.state.players.get(client2.sessionId)?.alive, true);
+  });
+
+  it("keeps a duel alive when the opponent leaves", async () => {
+    const room = await colyseus.createRoom<ArenaState>("duel", {});
+    const client1 = await colyseus.connectTo(room, { name: "Alpha" });
+    const client2 = await colyseus.connectTo(room, { name: "Beta" });
+    await room.waitForNextTimestep();
+
+    await client2.leave();
+    await room.waitForNextTimestep();
+    (room as any).advanceRoundOver(10);
+
+    assert.strictEqual(room.state.started, true, "the remaining warrior keeps playing");
+    assert.strictEqual(room.state.matchState, MATCH_STATE.live);
+    assert.strictEqual(room.state.players.size, 1);
+  });
+
   it("splits siege players into opposing tribes and charges the altar", async () => {
     const room = await colyseus.createRoom<ArenaState>("siege", {});
     const client1 = await colyseus.connectTo(room, { name: "Alpha" });

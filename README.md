@@ -11,6 +11,9 @@ The storm comes too. Stay inside the ring.
 - **Storm Duel.** Everyone fights everyone. First to three rounds wins.
 - **Altar Siege.** Two tribes fight for the centre altar. First to three captures wins.
 
+No one else online? Start any mode alone. Duel and Siege give you a solo hunt
+against the storm until a rival arrives.
+
 **How to play**
 
 <div align="center">

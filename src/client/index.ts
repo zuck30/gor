@@ -542,7 +542,9 @@ async function main(profile: PlayerProfile) {
         : "Survive the storm. Slay the gods.";
     briefLead.textContent = profile.mode === "coop"
       ? "You are Mwanafyale, the God of Rage. The ring is the clock. Clear each wave. Every fifth wave, a colossus rises."
-      : MODE_TAGLINE[profile.mode];
+      : room.state.players.size <= 1
+        ? `${MODE_TAGLINE[profile.mode]} No rival is here yet: hunt the storm alone until one arrives.`
+        : MODE_TAGLINE[profile.mode];
     briefRules.innerHTML = "";
     for (const rule of rules) {
       const item = document.createElement("li");
@@ -560,7 +562,9 @@ async function main(profile: PlayerProfile) {
         ? "Return to the fight"
         : profile.mode === "coop"
           ? "Begin the hunt"
-          : "Enter the arena";
+          : room.state.players.size <= 1
+            ? "Hunt alone"
+            : "Enter the arena";
       renderTriumphs();
     }
   }
@@ -577,10 +581,6 @@ async function main(profile: PlayerProfile) {
   helpToggle.addEventListener("click", () => setBrief(true));
 
   function togglePause() {
-    if (profile.mode !== "coop") {
-      announce("Pause is co-op only", 1600);
-      return;
-    }
     if (!room.state.started) { return; }
     if (document.body.classList.contains("is-cinematic")) { return; }
     if (room.state.players.size > 1 && !room.state.paused) {
@@ -830,6 +830,8 @@ async function main(profile: PlayerProfile) {
     const coop = gameMode === MODE_CODE.coop;
     const duel = gameMode === MODE_CODE.duel;
     const siege = gameMode === MODE_CODE.siege;
+    const solo = room.state.players.size <= 1;
+    const practice = solo && !coop;
     const paused = room.state.paused === true;
     const matchOver = room.state.matchState === MATCH_STATE.matchOver;
     const roundOver = room.state.matchState === MATCH_STATE.roundOver;
@@ -874,10 +876,17 @@ async function main(profile: PlayerProfile) {
     }
 
     modeBar.classList.toggle("is-visible", duel || siege);
-    objectiveBar.classList.toggle("is-visible", siege);
-    teamBadge.classList.toggle("is-visible", siege);
+    objectiveBar.classList.toggle("is-visible", siege && !practice);
+    teamBadge.classList.toggle("is-visible", siege && !practice);
 
-    if (duel) {
+    if (practice) {
+      // No rival is here yet: show the practice hunt, not an empty scoreline.
+      modeName.textContent = MODE_LABEL[profile.mode];
+      modeScore.textContent = room.state.started ? `solo hunt. ${foes} foes` : "no rival yet";
+      modeTimer.textContent = room.state.started
+        ? `wave ${Math.max(1, room.state.wave)}`
+        : "hunt alone";
+    } else if (duel) {
       modeName.textContent = MODE_LABEL.duel;
       modeScore.textContent = room.state.players.size > 1
         ? `you ${self.wins} - ${Math.max(0, bestOpponentWins)} ${bestOpponentName || "rival"}`
@@ -911,8 +920,8 @@ async function main(profile: PlayerProfile) {
     if (!room.state.started) {
       statusText = coop
         ? "the hunt awaits"
-        : room.state.players.size < 2
-          ? "waiting for rivals"
+        : practice
+          ? "no rivals yet. hunt alone."
           : "the storm gathers";
     } else if (matchOver) {
       statusText = room.state.winnerName
@@ -929,11 +938,17 @@ async function main(profile: PlayerProfile) {
           : `down. bleeding out in ${Math.max(0, Math.ceil(self.respawnTimer))}s.`;
       } else if (coop) {
         statusText = "out until the wave clears";
+      } else if (practice) {
+        statusText = `fallen. returning in ${Math.max(0, Math.ceil(self.respawnTimer))}s.`;
       } else if (duel) {
         statusText = "fallen. waiting for the next round.";
       } else {
         statusText = `fallen. returning in ${Math.max(0, Math.ceil(self.respawnTimer))}s.`;
       }
+    } else if (practice) {
+      statusText = foes === 0 && room.state.waveTimer > 0
+        ? `solo hunt. next wave in ${Math.ceil(room.state.waveTimer)}s.`
+        : `solo hunt. wave ${Math.max(1, room.state.wave)}. ${self.kills} slain. ${foes} foes.`;
     } else if (duel) {
       statusText = `round ${Math.max(1, room.state.round)}. ${self.wins} wins. ${aliveCount} standing.`;
     } else if (siege) {
@@ -957,7 +972,7 @@ async function main(profile: PlayerProfile) {
       statusEl.textContent = statusText;
     }
 
-    if (bossMax > 0 && !duel) {
+    if (bossMax > 0 && (!duel || practice)) {
       bossBar.classList.add("is-visible");
       bossName.textContent = "COLOSSUS OF THE STORM";
       bossFill.style.width = `${Math.max(0, (bossHealth / bossMax) * 100)}%`;
@@ -980,6 +995,8 @@ async function main(profile: PlayerProfile) {
       } else if (coop && self.out) {
         title = "You are out";
         sub = "Your allies fight on. You return when the wave is cleared.";
+      } else if (practice) {
+        showCountdown = true;
       } else if (duel && roundOver) {
         title = "Round over";
         sub = room.state.roundWinner
@@ -1004,8 +1021,8 @@ async function main(profile: PlayerProfile) {
         respawnValue.textContent = String(Math.max(0, Math.ceil(self.respawnTimer)));
       }
       deathKills.textContent = String(self.kills);
-      deathWaveLabel.textContent = coop ? "wave" : "round";
-      deathWaveEl.textContent = String(coop ? Math.max(1, room.state.wave) : Math.max(1, room.state.round));
+      deathWaveLabel.textContent = coop || practice ? "wave" : "round";
+      deathWaveEl.textContent = String(coop || practice ? Math.max(1, room.state.wave) : Math.max(1, room.state.round));
       deathTriumphsEl.textContent = String(board.count());
     }
 
@@ -1042,21 +1059,21 @@ async function main(profile: PlayerProfile) {
       setBrief(false);
     }
 
-    const solo = room.state.players.size <= 1;
-    pauseToggle.classList.toggle("is-solo-only", !coop || (!solo && !paused));
-    pauseToggle.title = !coop
-      ? "Pause is co-op only"
-      : !solo && !paused
-        ? "Pause is solo only"
-        : paused
-          ? "Resume"
-          : "Pause";
+    const soloPause = room.state.players.size <= 1;
+    pauseToggle.classList.toggle("is-solo-only", !soloPause && !paused);
+    pauseToggle.title = !soloPause && !paused
+      ? "Pause is solo only"
+      : paused
+        ? "Resume"
+        : "Pause";
     if (briefOpen) {
       briefAction.textContent = room.state.started
         ? "Return to the fight"
         : profile.mode === "coop"
           ? "Begin the hunt"
-          : "Enter the arena";
+          : soloPause
+            ? "Hunt alone"
+            : "Enter the arena";
     }
   }
 
@@ -1288,7 +1305,7 @@ async function main(profile: PlayerProfile) {
 
   function startRageCinematic(px: number, pz: number) {
     if (cinematicActive) { return; }
-    if (profile.mode !== "coop" || room.state.players.size > 1) {
+    if (room.state.players.size > 1) {
       // Do not freeze allies for a personal glory shot in a shared arena.
       fx.thunder(px, pz, 2.2);
       fx.kick(0.6);
@@ -1715,7 +1732,7 @@ async function main(profile: PlayerProfile) {
       announce(
         profile.mode === "coop" && self.downed
           ? "You are down"
-          : profile.mode === "duel"
+          : profile.mode === "duel" && room.state.players.size > 1
             ? "You fell"
             : "You died",
         2400

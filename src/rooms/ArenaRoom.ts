@@ -102,6 +102,12 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   private mode: GameMode = "coop";
   private altarCharge = 0;
   private matchOverTimer = 0;
+  /**
+   * A PvP room with a single warrior runs a co-op-style hunt until a rival
+   * arrives. The room keeps its mode so matchmaking still lands in the right
+   * rules, and the practice run is dropped the moment a second warrior joins.
+   */
+  private soloPractice = false;
 
   private attackCooldown = new Map<string, number>();
   private rageTimer = new Map<string, number>();
@@ -145,8 +151,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
     this.onMessage("ready", () => {
       if (this.started) { return; }
-      // Duel and siege need an opponent before the first round.
-      if (this.mode !== "coop" && this.state.players.size < 2) { return; }
+      // Every mode can start with a single warrior. PvP modes run a solo hunt
+      // until a rival arrives instead of leaving the player stuck in the lobby.
       this.startMatch();
     });
 
@@ -156,15 +162,15 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     });
 
     this.onMessage("togglePause", () => {
-      if (this.mode !== "coop" || !this.started) { return; }
-      // Solo players may pause. In a shared arena only an already-paused room
+      if (!this.started) { return; }
+      // Solo runs may pause. In a shared arena only an already-paused room
       // may be resumed, so one player can never freeze everyone else.
       if (this.state.players.size > 1 && !this.state.paused) { return; }
       this.state.paused = !this.state.paused;
     });
 
     this.onMessage("rageCinematic", () => {
-      if (this.mode !== "coop" || !this.started || this.state.paused) { return; }
+      if (!this.started || this.state.paused) { return; }
       // The slow-motion finale freezes the arena, so it is solo only.
       if (this.state.players.size > 1) { return; }
       this.cinematicRemaining = 4.8;
@@ -275,8 +281,13 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     this.invulnerable.set(client.sessionId, 2);
 
     // PvP modes begin as soon as two warriors share the arena.
-    if (!this.started && this.mode !== "coop" && this.state.players.size >= 2) {
-      this.startMatch();
+    if (this.mode !== "coop") {
+      if (this.started && this.soloPractice && this.state.players.size >= 2) {
+        // A rival arrived. Drop the practice hunt and start the real contest.
+        this.beginVersusMatch();
+      } else if (!this.started && this.state.players.size >= 2) {
+        this.startMatch();
+      }
     }
   }
 
@@ -422,9 +433,10 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
   private startMatch() {
     if (this.started) { return; }
-    if (this.mode !== "coop" && this.state.players.size < 2) { return; }
+    if (this.state.players.size < 1) { return; }
 
     this.started = true;
+    this.soloPractice = false;
     this.state.started = true;
     this.state.paused = false;
     this.state.matchState = MATCH_STATE.live;
@@ -453,7 +465,59 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       this.resetStorm();
       this.placePlayers("coop");
       this.state.waveTimer = 2.5;
+    } else if (this.state.players.size < 2) {
+      // No rival yet. Hunt the storm alone; a join switches to the real mode.
+      this.beginSoloPractice();
     } else if (this.mode === "duel") {
+      this.beginDuelRound();
+    } else {
+      this.beginSiegeRound();
+    }
+  }
+
+  /** The shared setup for a lone warrior in a PvP room. */
+  private beginSoloPractice() {
+    this.soloPractice = true;
+    this.state.matchState = MATCH_STATE.live;
+    this.state.round = 0;
+    this.state.roundTimer = 0;
+    this.state.wave = 0;
+    this.state.waveTimer = 2.5;
+    this.waveActive = false;
+    this.state.pickupActive = false;
+    this.state.pickupTimer = 0;
+    this.state.altar = 0;
+    this.altarCharge = 0;
+    this.clearEnemies();
+    this.resetStorm();
+    this.placePlayers(this.mode);
+  }
+
+  /** A rival arrived: replace the practice hunt with the real contest. */
+  private beginVersusMatch() {
+    this.soloPractice = false;
+    this.state.matchState = MATCH_STATE.live;
+    this.state.round = 0;
+    this.state.roundTimer = 0;
+    this.state.scoreRed = 0;
+    this.state.scoreBlue = 0;
+    this.state.altar = 0;
+    this.altarCharge = 0;
+    this.state.winnerTeam = 255;
+    this.state.winnerName = "";
+    this.state.roundWinner = "";
+    this.state.pickupActive = false;
+    this.state.pickupTimer = 0;
+    this.state.wave = 0;
+    this.state.waveTimer = 0;
+    this.waveActive = false;
+
+    for (const [, player] of this.state.players) {
+      player.kills = 0;
+      player.revives = 0;
+    }
+
+    if (this.mode === "duel") {
       this.beginDuelRound();
     } else {
       this.beginSiegeRound();
@@ -491,13 +555,15 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     }
     this.placePlayers(this.mode);
 
-    if (this.mode === "coop" || this.state.players.size >= 2) {
+    // Anyone still here can start again. A lone warrior gets a practice hunt.
+    if (this.state.players.size >= 1) {
       this.startMatch();
     }
   }
 
   private resetToWaiting() {
     this.started = false;
+    this.soloPractice = false;
     this.state.started = false;
     this.state.matchState = MATCH_STATE.waiting;
     this.state.roundTimer = 0;
@@ -531,6 +597,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private beginDuelRound() {
+    this.soloPractice = false;
     this.state.round = Math.min(255, this.state.round + 1);
     this.state.matchState = MATCH_STATE.live;
     this.state.roundTimer = DUEL.roundSeconds;
@@ -547,6 +614,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private beginSiegeRound() {
+    this.soloPractice = false;
     this.state.round = Math.min(255, this.state.round + 1);
     this.state.matchState = MATCH_STATE.live;
     this.state.roundTimer = SIEGE.roundSeconds;
@@ -610,7 +678,9 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       } else if (this.state.players.size >= 2) {
         this.beginDuelRound();
       } else {
+        // The only warrior left keeps playing instead of waiting in the lobby.
         this.resetToWaiting();
+        this.startMatch();
       }
       return;
     }
@@ -624,6 +694,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
         this.beginSiegeRound();
       } else {
         this.resetToWaiting();
+        this.startMatch();
       }
     }
   }
@@ -956,7 +1027,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     let primary: ChainTarget | null = null;
     let bestDistance: number = CHAIN_COMBO.range;
 
-    if (this.mode !== "duel") {
+    if (this.mode !== "duel" || this.soloPractice) {
       for (const [, enemy] of this.state.enemies) {
         if (!enemy.alive) { continue; }
         const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
@@ -1024,7 +1095,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
     }
 
     // The returning blades lash everything around the impact point.
-    if (this.mode !== "duel") {
+    if (this.mode !== "duel" || this.soloPractice) {
       for (const [, enemy] of this.state.enemies) {
         if (!enemy.alive || (primary.type === "enemy" && enemy === primary.enemy)) { continue; }
         if (Math.hypot(enemy.x - impactX, enemy.y - impactY) > CHAIN_COMBO.splashRadius) {
@@ -1087,7 +1158,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
 
     const inRange: SwingTarget[] = [];
 
-    if (this.mode !== "duel") {
+    if (this.mode !== "duel" || this.soloPractice) {
       for (const [, enemy] of this.state.enemies) {
         if (!enemy.alive) { continue; }
         const kind = ENEMY_KINDS[enemy.kind] ?? "draugr";
@@ -1271,7 +1342,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private startWave() {
-    if (this.mode === "duel") { return; }
+    // A real duel has no monsters. A lone duelist hunts waves instead.
+    if (this.mode === "duel" && !this.soloPractice) { return; }
 
     // Clear the previous wave's dead so the schema map never grows forever.
     for (const [id, enemy] of this.state.enemies) {
@@ -1294,7 +1366,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
   }
 
   private tickWaves(dt: number) {
-    if (!this.started || this.mode === "duel") {
+    if (!this.started || (this.mode === "duel" && !this.soloPractice)) {
       return;
     }
     if (this.state.waveTimer > 0) {
@@ -1526,7 +1598,8 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
           stepEntity(player, input, dt);
         }
       }
-      if (this.mode === "coop" && this.idleTime >= 20) {
+      // Nobody pressed ready. Do not leave a lone warrior in an empty lobby.
+      if (this.idleTime >= 20) {
         this.startMatch();
       }
       return;
@@ -1549,14 +1622,14 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       }
 
       if (!player.alive) {
-        // Solo co-op keeps the old six second return. A multiplayer co-op
-        // warrior is out until the wave is cleared.
-        if (this.mode === "coop" && this.state.players.size === 1) {
-          player.respawnTimer = Math.max(0, player.respawnTimer - dt);
-          if (player.respawnTimer <= 0) {
-            this.respawnPlayer(sessionId, player);
-          }
-        } else if (this.mode === "siege") {
+        // Solo co-op and solo PvP keep the old six second return. A siege
+        // always respawns. A multiplayer co-op warrior is out until the wave
+        // is cleared, and a fallen duelist waits for the next round.
+        if (
+          this.soloPractice
+          || this.mode === "siege"
+          || (this.mode === "coop" && this.state.players.size === 1)
+        ) {
           player.respawnTimer = Math.max(0, player.respawnTimer - dt);
           if (player.respawnTimer <= 0) {
             this.respawnPlayer(sessionId, player);
@@ -1608,7 +1681,7 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       if (damage > 0) {
         player.health = applyDamage(player.health, damage);
         if (player.health <= 0) {
-          if (this.mode === "duel") {
+          if (this.mode === "duel" && !this.soloPractice) {
             this.defeatPlayer(sessionId, player);
           } else if (this.mode === "coop" && this.state.players.size > 1) {
             this.downPlayer(sessionId, player);
@@ -1625,6 +1698,13 @@ export class ArenaRoom extends Room<{ state: ArenaState, input: MoveInput }> {
       this.tickEnemies(dt);
       this.tickWaves(dt);
       this.checkCoopEnd();
+      return;
+    }
+
+    if (this.soloPractice) {
+      // A lone warrior hunts the storm instead of fighting a phantom rival.
+      this.tickEnemies(dt);
+      this.tickWaves(dt);
       return;
     }
 
